@@ -84,7 +84,7 @@ src/
 | `TURNSTILE_SITE_KEY` / `TURNSTILE_SECRET_KEY` | | 両方設定すると Turnstile が有効になる |
 | `PORT` | | 既定値は 3000 |
 
-`.env` を置くと、`npm run dev` / `npm start` 実行時に読み込まれる。
+`.env` を置くと、`pnpm dev` / `pnpm start` 実行時に読み込まれる。
 
 ## 決めたこと・トレードオフ
 
