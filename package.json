@@ -1,0 +1,23 @@
+{
+  "name": "backlog-form",
+  "version": "1.0.0",
+  "scripts": {
+    "dev": "node --watch --env-file-if-exists=.env src/index.ts",
+    "start": "node --env-file-if-exists=.env src/index.ts",
+    "typecheck": "tsc",
+    "test": "node --test \"test/**/*.test.ts\""
+  },
+  "type": "module",
+  "dependencies": {
+    "@hono/node-server": "^2.1.5",
+    "hono": "^4.13.13"
+  },
+  "devDependencies": {
+    "@types/node": "^24.19.2",
+    "typescript": "^7.0.2"
+  },
+  "private": true,
+  "engines": {
+    "node": ">=24"
+  }
+}
