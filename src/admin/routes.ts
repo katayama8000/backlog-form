@@ -6,7 +6,8 @@ import { parseSpaceHost } from "../backlog/oauth.ts";
 import { applicableFields, FormUnavailableError, type SchemaLoader } from "../backlog/schema.ts";
 import { randomId } from "../crypto.ts";
 import { renderForm } from "../form/render.ts";
-import type { Connection, Store } from "../store.ts";
+import type { Backend } from "../backend.ts";
+import type { Connection } from "../store.ts";
 import {
   type EditorView,
   renderAdminMessage,
@@ -20,7 +21,7 @@ import {
 } from "./render.ts";
 
 export type AdminDeps = {
-  store: Store;
+  store: Backend;
   gateway: BacklogGateway;
   oauth: OAuthProvider;
   schemas: SchemaLoader;
@@ -95,12 +96,12 @@ export function adminRoutes(deps: AdminDeps) {
     return Object.hasOwn(TOASTS, key) ? (key as ToastKey) : undefined;
   }
 
-  function currentConnection(c: Context): Connection | undefined {
+  async function currentConnection(c: Context): Promise<Connection | undefined> {
     const token = getCookie(c, SESSION_COOKIE);
     return token ? store.findSession(token) : undefined;
   }
 
-  app.get("/", (c) => (currentConnection(c) ? c.redirect("/forms") : c.html(renderLanding())));
+  app.get("/", async (c) => ((await currentConnection(c)) ? c.redirect("/forms") : c.html(renderLanding())));
 
   app.post("/login", async (c) => {
     const data = await c.req.formData();
@@ -131,7 +132,7 @@ export function adminRoutes(deps: AdminDeps) {
     try {
       const tokens = await oauth.exchangeCode(expected.host, code);
       const me = await gateway.withToken(expected.host, tokens.accessToken).getMyself();
-      connection = store.upsertConnection({
+      connection = await store.upsertConnection({
         spaceHost: expected.host,
         userId: me.id,
         userName: me.name,
@@ -141,21 +142,21 @@ export function adminRoutes(deps: AdminDeps) {
       console.error("OAuth callback failed", err);
       return c.html(renderLanding("ログインに失敗しました。もう一度お試しください。"), 502);
     }
-    const token = store.createSession(connection.id, SESSION_TTL_MS);
+    const token = await store.createSession(connection.id, SESSION_TTL_MS);
     setCookie(c, SESSION_COOKIE, token, { ...cookie, maxAge: SESSION_TTL_MS / 1000 });
     return c.redirect("/forms");
   });
 
-  app.post("/logout", (c) => {
+  app.post("/logout", async (c) => {
     const token = getCookie(c, SESSION_COOKIE);
-    if (token) store.deleteSession(token);
+    if (token) await store.deleteSession(token);
     deleteCookie(c, SESSION_COOKIE, { path: "/" });
     return c.redirect("/");
   });
 
   // Everything below requires a session.
   const requireSession = async (c: Context<Env>, next: () => Promise<void>) => {
-    const connection = currentConnection(c);
+    const connection = await currentConnection(c);
     if (!connection) return c.redirect("/");
     c.set("connection", connection);
     await next();
@@ -163,9 +164,9 @@ export function adminRoutes(deps: AdminDeps) {
   app.use("/forms", requireSession);
   app.use("/forms/*", requireSession);
 
-  app.get("/forms", (c) => {
+  app.get("/forms", async (c) => {
     const connection = c.get("connection");
-    const forms = store.listForms(connection.id).map((form) => ({ ...form, url: formUrl(form.id) }));
+    const forms = (await store.listForms(connection.id)).map((form) => ({ ...form, url: formUrl(form.id) }));
     return c.html(renderFormList(connection, forms, takeFlash(c)));
   });
 
@@ -219,7 +220,7 @@ export function adminRoutes(deps: AdminDeps) {
     const { values, errors } = readEditor(data, target.fields);
     if (errors) return c.html(renderEditor({ connection, ...target, values, errors }), 400);
 
-    const form = store.createForm({
+    const form = await store.createForm({
       connectionId: connection.id,
       projectId: target.project.id,
       projectName: target.project.name,
@@ -232,14 +233,14 @@ export function adminRoutes(deps: AdminDeps) {
   });
 
   // Loads a form owned by the signed-in user, or undefined.
-  function ownForm(c: Context<Env>) {
-    const form = store.getForm(c.req.param("id") ?? "");
+  async function ownForm(c: Context<Env>) {
+    const form = await store.getForm(c.req.param("id") ?? "");
     return form && form.connectionId === c.get("connection").id ? form : undefined;
   }
 
   async function editorFor(c: Context<Env>): Promise<Omit<EditorView, "values"> | Response> {
     const connection = c.get("connection");
-    const form = ownForm(c);
+    const form = await ownForm(c);
     if (!form) {
       return c.html(renderAdminMessage(connection, "見つかりません", "フォームが見つかりません。"), 404);
     }
@@ -260,13 +261,13 @@ export function adminRoutes(deps: AdminDeps) {
   app.get("/forms/:id", async (c) => {
     const view = await editorFor(c);
     if (view instanceof Response) return view;
-    const form = ownForm(c)!;
+    const form = (await ownForm(c))!;
     return c.html(renderEditor({ ...view, values: form, toast: takeFlash(c) }));
   });
 
   // The public form as submitters see it, even while it's not published.
   app.get("/forms/:id/preview", async (c) => {
-    const form = ownForm(c);
+    const form = await ownForm(c);
     if (!form) {
       return c.html(renderAdminMessage(c.get("connection"), "見つかりません", "フォームが見つかりません。"), 404);
     }
@@ -287,16 +288,16 @@ export function adminRoutes(deps: AdminDeps) {
     const { values, errors } = readEditor(await c.req.formData(), view.fields);
     if (errors) return c.html(renderEditor({ ...view, values, errors }), 400);
     // Also refreshes the issue type name, which older forms don't have.
-    store.updateForm(view.form!.id, { ...values, issueTypeName: view.issueType.name });
+    await store.updateForm(view.form!.id, { ...values, issueTypeName: view.issueType.name });
     schemas.invalidate(view.form!.id);
     setFlash(c, "saved");
     return c.redirect(`/forms/${view.form!.id}`);
   });
 
-  app.post("/forms/:id/delete", (c) => {
-    const form = ownForm(c);
+  app.post("/forms/:id/delete", async (c) => {
+    const form = await ownForm(c);
     if (form) {
-      store.deleteForm(form.id);
+      await store.deleteForm(form.id);
       schemas.invalidate(form.id);
       setFlash(c, "deleted");
     }

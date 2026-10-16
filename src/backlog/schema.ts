@@ -1,4 +1,5 @@
-import type { FormRecord, Store } from "../store.ts";
+import type { Backend } from "../backend.ts";
+import type { FormRecord } from "../store.ts";
 import type { BacklogGateway } from "./client.ts";
 import type { CustomField, IssueType, Project } from "./types.ts";
 
@@ -24,12 +25,14 @@ export function applicableFields(fields: CustomField[], issueTypeId: number): Cu
 const TTL_MS = 5 * 60 * 1000;
 
 // Caches schemas in memory to stay well within Backlog's rate limits.
-// Fine for a single process; swap for a shared store if scaled out.
-export function createSchemaLoader(store: Store, gateway: BacklogGateway) {
-  const cache = new Map<string, { schema: FormSchema; expiresAt: number }>();
+// Each process (or Worker isolate) has its own cache. Entries remember the
+// form's settings they were built from, so saving a form takes effect
+// everywhere right away; only changes made in Backlog can take up to TTL_MS.
+export function createSchemaLoader(store: Backend, gateway: BacklogGateway) {
+  const cache = new Map<string, { settings: string; schema: FormSchema; expiresAt: number }>();
 
   async function fetchSchema(form: FormRecord): Promise<FormSchema> {
-    const connection = store.getConnection(form.connectionId);
+    const connection = await store.getConnection(form.connectionId);
     if (!connection) throw new FormUnavailableError(`Connection of form ${form.id} is gone`);
     const client = gateway.forConnection(connection);
 
@@ -55,10 +58,13 @@ export function createSchemaLoader(store: Store, gateway: BacklogGateway) {
 
   return {
     async load(form: FormRecord, { fresh = false }: { fresh?: boolean } = {}): Promise<FormSchema> {
+      const settings = JSON.stringify([form.title, form.description, form.fieldIds]);
       const cached = cache.get(form.id);
-      if (!fresh && cached && cached.expiresAt > Date.now()) return cached.schema;
+      if (!fresh && cached && cached.settings === settings && cached.expiresAt > Date.now()) {
+        return cached.schema;
+      }
       const schema = await fetchSchema(form);
-      cache.set(form.id, { schema, expiresAt: Date.now() + TTL_MS });
+      cache.set(form.id, { settings, schema, expiresAt: Date.now() + TTL_MS });
       return schema;
     },
     invalidate(formId: string): void {

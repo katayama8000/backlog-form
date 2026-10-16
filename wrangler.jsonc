@@ -1,0 +1,21 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "backlog-form",
+  "main": "src/worker.ts",
+  "compatibility_date": "2026-10-01",
+  // node:crypto and Buffer, used for token encryption.
+  "compatibility_flags": ["nodejs_compat"],
+  "observability": { "enabled": true },
+  // All state lives in one SQLite-backed Durable Object (see src/worker.ts).
+  "durable_objects": {
+    "bindings": [{ "name": "BACKEND", "class_name": "BackendObject" }]
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["BackendObject"] }],
+  "vars": {
+    // The deployed URL. `pnpm cf:dev` serves http://localhost:8787 instead;
+    // override APP_URL in .dev.vars to sign in there.
+    "APP_URL": "https://backlog-form.tattu-0310.workers.dev"
+  }
+  // Secrets, set with `wrangler secret put`: APP_SECRET, BACKLOG_CLIENT_ID,
+  // BACKLOG_CLIENT_SECRET, and optionally TURNSTILE_SITE_KEY, TURNSTILE_SECRET_KEY.
+}

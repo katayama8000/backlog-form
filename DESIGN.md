@@ -9,7 +9,7 @@ Web フォームから Backlog に課題を登録できるようにする。
 
 | 人 | すること |
 |---|---|
-| 運用者 | このアプリを 1 か所にデプロイする。OAuth アプリを登録して環境変数に設定する |
+| 運用者 | このアプリを Cloudflare Workers にデプロイする。OAuth アプリを登録して環境変数・シークレットに設定する |
 | フォームを作る人 | どのスペースの Backlog ユーザーでもよい。OAuth でログインし、プロジェクト・課題種別・表示するカスタム属性を選んでフォームを公開する |
 | 送信する人 | フォームの URL を知っている人なら誰でも（社内・社外、Backlog アカウントの有無を問わない）。URL を開いて入力するだけ |
 
@@ -34,12 +34,12 @@ Web フォームから Backlog に課題を登録できるようにする。
 
 | 役割 | 採用 | メモ |
 |---|---|---|
-| ランタイム | Node.js 24 | 型を除去して `.ts` を直接実行するため、ビルド手順はない |
+| ランタイム | 本番は Cloudflare Workers、ローカルは Node.js 24 | Node では型を除去して `.ts` を直接実行する（ビルド手順なし）。Workers 向けには wrangler がまとめる。無料プランで動く |
 | 型チェック | TypeScript 7 | `tsc` は型チェック専用（`noEmit`）。`erasableSyntaxOnly` で enum などは使わない |
-| Web | Hono + @hono/node-server | |
+| Web | Hono（Node では @hono/node-server） | |
 | HTML | `hono/html` のタグ付きテンプレート | JSX は Node の型除去では動かないため不採用。埋め込んだ値は自動でエスケープされる |
 | Backlog API | [backlog-js](https://github.com/nulab/backlog-js) | 公式 SDK。API 呼び出しと OAuth 2.0 の両方に使う。`client.ts` で `BacklogClient` として包み、テストではこれを差し替える |
-| 保存先 | `node:sqlite` | 接続（トークン）・セッション・フォーム設定。外部の DB を立てずに済む |
+| 保存先 | SQLite（本番は Durable Object 1 つ、ローカルは `node:sqlite`） | 接続（トークン）・セッション・フォーム設定。SQL は共通で、`SqlDriver` で差し替える |
 | バリデーション | 自前実装 | カスタム属性ごとの動的なルールとエラーメッセージを扱いやすいため |
 | スパム対策 | ハニーポット + Cloudflare Turnstile（任意） | |
 | スタイル | 自前の CSS（`layout.ts` に埋め込み） | Backlog のブランドカラー（#42ce9f）に合わせる。白文字を載せるボタンなどは、コントラスト比 4.5:1 を保つため濃い緑（#16805e）を使う。ダークモード対応。外部 CDN に依存しない |
@@ -99,11 +99,15 @@ POST /f/:formId             定義を再取得（キャッシュを使わない�
 
 ```
 src/
-├── index.ts            # エントリポイント（起動処理と依存の組み立て）
+├── index.ts            # Node のエントリポイント（ローカル開発用）
+├── worker.ts           # Cloudflare のエントリポイントと Durable Object
+├── setup.ts            # 依存の組み立て（Node と Workers で共通）
+├── backend.ts          # 保存とトークン更新の窓口（すべて非同期。Workers では Durable Object の中で動く）
+├── node-sqlite.ts      # node:sqlite 用の SqlDriver
 ├── app.ts              # 公開フォームのルート、CSRF、エラー処理。依存は外から注入（テストで差し替えるため）
 ├── config.ts           # 環境変数
 ├── crypto.ts           # 鍵の導出、暗号化、ランダム ID
-├── store.ts            # SQLite（接続・セッション・フォーム）
+├── store.ts            # SQL（接続・セッション・フォーム）。SqlDriver の上で動く
 ├── layout.ts           # 共通の HTML レイアウトと CSS
 ├── turnstile.ts
 ├── admin/
@@ -146,16 +150,18 @@ src/
 | `APP_URL` | ○ | 公開 URL。OAuth のリダイレクト URI は `${APP_URL}/oauth/callback` |
 | `APP_SECRET` | ○ | 32 文字以上のランダムな文字列 |
 | `BACKLOG_CLIENT_ID` / `BACKLOG_CLIENT_SECRET` | ○ | 登録した OAuth アプリのもの |
-| `DATABASE_PATH` | | 既定値は `data/backlog-form.db` |
+| `DATABASE_PATH` | | Node のみ。既定値は `data/backlog-form.db` |
 | `TURNSTILE_SITE_KEY` / `TURNSTILE_SECRET_KEY` | | 両方設定すると Turnstile が有効になる |
 | `PORT` | | 既定値は 3000 |
 
 `.env` を置くと、`pnpm dev` / `pnpm start` 実行時に読み込まれる。
+Cloudflare では `APP_URL` を `wrangler.jsonc` の `vars` に、それ以外を `wrangler secret put` で設定する（`DATABASE_PATH` と `PORT` は使わない）。`pnpm cf:dev` では `.dev.vars` を読む。
 
 ## 決めたこと・トレードオフ
 
 - **非同期キューは入れない（MVP）**：送信の場で課題を作り、失敗したら入力内容を残したままエラーを表示する。件数が増えたり取りこぼしが問題になったら、送信内容を SQLite に保存してリトライする形にする。
-- **キャッシュとトークン更新のまとめ処理はメモリ上**：1 プロセスで動かす前提。複数台にするなら共有ストアに移す。
+- **状態は Durable Object 1 つに集める**：Workers は同時に複数の isolate で動くが、保存とトークン更新は 1 つの Durable Object を通すので、書き手は常に 1 つになる。Backlog はリフレッシュトークンを更新のたびに変えるため、更新が並ぶとどちらかが失敗して作成者がログアウト扱いになる。これを防ぐのが主な理由。D1 は安いが、この排他を別に作る必要があるので採らなかった。
+- **フォーム定義のキャッシュは isolate ごと**：フォームの設定を保存したら、キャッシュはその設定と食い違うので次のアクセスで取り直す。Backlog 側の変更は最大 5 分遅れる。
 - **ハニーポットに引っかかった送信は成功を装う**：bot に検知されたことを悟らせないため。
 - **課題の作成者はフォームを作った人**：OAuth にはボットユーザーの概念がないため。名前を出したくない場合は、専用のアカウントでログインしてもらう。
 - **`[form]` の目印は廃止した**：以前は名前の先頭に `[form]` を付けたものを公開していたが、管理画面で選ぶ方式に置き換えた。
@@ -172,4 +178,5 @@ src/
 - [ ] 添付ファイル：`POST /space/attachment` → `attachmentId[]`（サイズ上限と拡張子の制限も入れる）
 - [ ] 送信者への受付メール（「連絡先メール」のカスタム属性を使う）
 - [ ] IP ごとのレート制限
-- [ ] デプロイ先の決定（SQLite のファイルを永続化できるところ。Fly.io のボリュームなど）
+- [x] デプロイ先は Cloudflare Workers + Durable Object（無料プラン）
+- [ ] 本番で 1 リクエストの CPU 時間が無料プランの 10 ms に収まるか確認する
