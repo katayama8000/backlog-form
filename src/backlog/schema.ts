@@ -6,6 +6,7 @@ export type FormSchema = {
   project: Project;
   issueType: IssueType;
   title: string;
+  description: string;
   fields: CustomField[];
 };
 
@@ -49,7 +50,7 @@ export function createSchemaLoader(store: Store, gateway: BacklogGateway) {
     const fields = applicableFields(customFields, issueType.id).filter(
       (f) => f.required || selected.has(f.id),
     );
-    return { project, issueType, title: form.title, fields };
+    return { project, issueType, title: form.title, description: form.description, fields };
   }
 
   return {

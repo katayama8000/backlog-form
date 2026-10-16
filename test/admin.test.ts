@@ -56,8 +56,12 @@ test("creates a form through the wizard", async () => {
   const get = (path: string) => ctx.app.request(path, { headers: { cookie: session } });
 
   assert.match(await (await get("/forms/new")).text(), /projectId=1/);
-  assert.match(await (await get("/forms/new?projectId=1")).text(), /issueTypeId=5/);
+  const types = await (await get("/forms/new?projectId=1")).text();
+  assert.match(types, /issueTypeId=5/);
+  assert.match(types, /カスタム属性 \d+ 件/);
+  assert.match(types, /https:\/\/example\.backlog\.com\/ListIssueType\.action\?projectId=1/);
   const editor = await (await get("/forms/new?projectId=1&issueTypeId=5")).text();
+  assert.match(editor, /https:\/\/example\.backlog\.com\/ListAttribute\.action\?projectId=1/);
   // Required fields are pre-checked and can't be unchecked.
   assert.match(editor, /value="10" checked\s+disabled/);
 
@@ -91,7 +95,9 @@ test("updates and deletes a form", async () => {
     projectId: 1,
     projectName: "Test",
     issueTypeId: 5,
+    issueTypeName: "お問い合わせ",
     title: "旧タイトル",
+    description: "",
     fieldIds: [],
     enabled: true,
   });
@@ -104,6 +110,32 @@ test("updates and deletes a form", async () => {
 
   await ctx.app.fetch(post(`/forms/${form.id}/delete`, {}, session));
   assert.equal(ctx.store.getForm(form.id), undefined);
+});
+
+test("shows a toast once after saving", async () => {
+  const ctx = setup();
+  const session = await signIn(ctx);
+  const form = ctx.store.createForm({
+    connectionId: ctx.connection.id,
+    projectId: 1,
+    projectName: "Test",
+    issueTypeId: 5,
+    issueTypeName: "お問い合わせ",
+    title: "お問い合わせ",
+    description: "",
+    fieldIds: [],
+    enabled: true,
+  });
+
+  const saved = await ctx.app.fetch(post(`/forms/${form.id}`, { title: "お問い合わせ" }, session));
+  const flash = cookies(saved);
+  const page = await ctx.app.request(`/forms/${form.id}`, { headers: { cookie: `${session}; ${flash}` } });
+  assert.match(await page.text(), /class="toast" role="status">保存しました</);
+  // The flash cookie is cleared, so a reload shows no toast.
+  assert.ok(page.headers.getSetCookie().some((c) => /^flash=;.*Max-Age=0/i.test(c)));
+
+  const forged = await ctx.app.request("/forms", { headers: { cookie: `${session}; flash=<b>x</b>` } });
+  assert.doesNotMatch(await forged.text(), /class="toast"/);
 });
 
 test("users can't see or edit other users' forms", async () => {
@@ -121,7 +153,9 @@ test("users can't see or edit other users' forms", async () => {
     projectId: 1,
     projectName: "Test",
     issueTypeId: 5,
+    issueTypeName: "お問い合わせ",
     title: "Bob のフォーム",
+    description: "",
     fieldIds: [],
     enabled: true,
   });
@@ -138,4 +172,32 @@ test("logout ends the session", async () => {
   await ctx.app.fetch(post("/logout", {}, session));
   const res = await ctx.app.request("/forms", { headers: { cookie: session } });
   assert.equal(res.headers.get("location"), "/");
+});
+
+test("lists forms with their issue type and a copy button", async () => {
+  const ctx = setup();
+  const session = await signIn(ctx);
+  const form = ctx.store.createForm({
+    connectionId: ctx.connection.id,
+    projectId: 1,
+    projectName: "Test",
+    issueTypeId: 5,
+    issueTypeName: "お問い合わせ",
+    title: "窓口",
+    description: "",
+    fieldIds: [],
+    enabled: false,
+  });
+  const body = await (await ctx.app.request("/forms", { headers: { cookie: session } })).text();
+  assert.match(body, /Test \/ お問い合わせ/);
+  assert.doesNotMatch(body, /data-copy="/); // unpublished forms have nothing to share
+
+  // The preview works even while the form is unpublished, but can't be submitted.
+  const preview = await ctx.app.request(`/forms/${form.id}/preview`, { headers: { cookie: session } });
+  assert.equal(preview.status, 200);
+  assert.match(await preview.text(), /<button type="submit" disabled>/);
+
+  ctx.store.updateForm(form.id, { ...form, enabled: true });
+  const published = await (await ctx.app.request("/forms", { headers: { cookie: session } })).text();
+  assert.match(published, new RegExp(`data-copy="http://localhost/f/${form.id}"`));
 });

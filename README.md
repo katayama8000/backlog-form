@@ -1,6 +1,6 @@
 # backlog-form
 
-A web form service that lets people without a Backlog account (customers, partners, etc.) submit issues to Backlog.
+A web form service that lets anyone with the form URL submit issues to Backlog, whether they are teammates or outside the organization, and with or without a Backlog account.
 
 Backlog users sign in with their Backlog account, pick a project and issue type, choose which custom fields to show, and get a public form URL. Submissions become issues, with each answer stored in its custom field. Form fields are **generated from Backlog custom fields**, so changing a field in Backlog updates the form.
 
@@ -9,15 +9,17 @@ See [DESIGN.md](./DESIGN.md) (Japanese) for design details.
 ## For form creators
 
 1. Open the app and sign in with your Backlog space (e.g. `example.backlog.com`), then allow access on Backlog's consent screen.
-2. Choose **新しいフォームを作る**, then a project and an issue type.
-3. Set a title, check the custom fields to show, and save. The form page shows the public URL (`/f/{id}`) to hand out.
+2. Choose **新しいフォームを作る**, then a project and an issue type. Each issue type shows how many custom fields it has. If the one you need doesn't exist, use the link to Project settings > Issue types in Backlog, then reload the page.
+3. Set a title and an optional description (shown under the title), check the custom fields to show, and save.
+4. Copy the public URL (`/f/{id}`) with **コピー** on the form page or in the form list, and hand it out. Use **プレビュー** to see the form as submitters do, even while it's unpublished.
 
 Tips:
 
-- **Use an issue type dedicated to external submissions** (e.g. "External inquiry") so they stay separate from internal issues.
+- **Use an issue type dedicated to form submissions** (e.g. "Inquiry") so they stay separate from other issues.
 - **Required custom fields are always shown**, because Backlog rejects issues without them.
-- **Field names and descriptions are shown publicly.** Don't select fields with internal-only wording.
-- **Field definitions live in Backlog.** Add fields or change choices in the project settings; the form picks up changes within about five minutes.
+- **Field names and descriptions are shown to anyone who opens the form.** Don't select fields you don't want them to see.
+- **Field definitions live in Backlog.** Add fields or change choices under Project settings > Custom fields (linked from the form page); the form picks up changes within about five minutes.
+- **Multiple-choice lists are shown as checkboxes** on the form, since they are easier to use than a multi-select box, especially on phones.
 - **Issues are created as the user who made the form.** If you don't want your name on them, sign in with a dedicated account.
 - **Revoking access breaks your forms.** If you revoke this app's access in Backlog, your forms stop working until you sign in again.
 
@@ -48,7 +50,7 @@ cp .env.example .env
 
 Keep `APP_SECRET` stable. Changing it signs everyone out and makes the stored tokens unreadable, so every form stops working until its creator signs in again.
 
-The database holds each creator's OAuth tokens (encrypted) and form settings. Put it on persistent storage and back it up.
+The database holds each creator's OAuth tokens (encrypted) and form settings. Put it on persistent storage and back it up. New columns are added automatically on startup, so an existing database keeps working after an upgrade.
 
 ### Run
 

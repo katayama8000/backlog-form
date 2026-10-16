@@ -70,7 +70,8 @@ export function createApp(deps: AppDeps) {
     const view = { schema, input, turnstileSiteKey: turnstile?.siteKey };
 
     // Bots tend to fill every field; pretend success so they don't retry.
-    if (input[names.honeypot] !== "") return c.html(renderDone(schema));
+    const done = () => c.html(renderDone(schema, `/f/${form.id}`));
+    if (input[names.honeypot] !== "") return done();
 
     if (turnstile) {
       const token = formData.get("cf-turnstile-response");
@@ -98,7 +99,7 @@ export function createApp(deps: AppDeps) {
         502,
       );
     }
-    return c.html(renderDone(schema));
+    return done();
   });
 
   app.onError((error, c) => {

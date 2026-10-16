@@ -154,13 +154,15 @@ button.link:hover { background: none; color: var(--brand-strong-hover); }
 button.danger { color: var(--danger); background: var(--surface); border: 1px solid var(--danger); }
 button.danger:hover { background: var(--danger-soft); }
 a { color: var(--brand-strong); }
-.list { list-style: none; margin: 0 0 24px; padding: 0; border: 1px solid var(--border); border-radius: 8px; }
+.list { list-style: none; margin: 0 0 24px; padding: 0; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
 .list > li + li { border-top: 1px solid var(--border); }
 .list a.row, .list .row {
   display: flex; justify-content: space-between; align-items: center; gap: 12px;
   padding: 14px 16px; color: inherit; text-decoration: none;
 }
-.list a.row:hover { background: var(--brand-soft); }
+/* Highlight the whole row, including buttons next to the link. */
+.list > li:has(> a.row:hover, > button:hover) { background: var(--brand-soft); }
+.list > li:has(> a.row:hover, > button:hover) .status { background: var(--surface); }
 .row-title { font-weight: 600; }
 .row-sub { display: block; color: var(--muted); font-size: 0.8125rem; }
 .chevron { color: var(--muted); }
@@ -182,6 +184,67 @@ a { color: var(--brand-strong); }
 .choice:has(input:disabled) { cursor: default; }
 .notice { background: var(--brand-soft); border-radius: 6px; padding: 12px 14px; margin: 0 0 24px; font-size: 0.875rem; }
 .actions { display: grid; gap: 12px; }
+.form-description { white-space: pre-line; margin: 0 0 16px; }
+.preview-banner { text-align: center; font-weight: 700; }
+button:disabled { opacity: 0.6; cursor: default; }
+button.copy {
+  display: inline-block; width: auto; flex: none;
+  font-size: 0.875rem; padding: 8px 14px;
+}
+.list .form-row { display: flex; align-items: center; }
+.list .form-row > a.row { flex: 1; min-width: 0; }
+.list .form-row > button.copy { margin-right: 16px; }
+.toast {
+  position: fixed; left: 50%; bottom: 24px; z-index: 10;
+  max-width: calc(100% - 32px); margin: 0; padding: 12px 20px;
+  color: var(--on-brand); background: var(--brand-strong); font-weight: 600;
+  border-radius: 8px; box-shadow: 0 4px 16px rgb(0 0 0 / 0.2);
+  pointer-events: none;
+  animation: toast 4s ease forwards;
+}
+@keyframes toast {
+  from { opacity: 0; transform: translate(-50%, 8px); }
+  8%, 85% { opacity: 1; transform: translate(-50%, 0); }
+  to { opacity: 0; transform: translate(-50%, 0); visibility: hidden; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .toast { animation: none; }
+}
+`);
+
+// Progressive enhancements shared by every page; everything works without them.
+// - Forms with data-once can't be submitted twice (avoids duplicate issues).
+// - The first invalid input gets focus after a failed submit.
+// - Buttons with data-copy copy that text to the clipboard.
+const script = raw(`
+document.addEventListener("submit", (event) => {
+  const form = event.target;
+  if (!form.hasAttribute("data-once")) return;
+  if (form.dataset.sent) return event.preventDefault();
+  form.dataset.sent = "1";
+  const button = form.querySelector("button[type=submit]");
+  if (button) { button.disabled = true; button.dataset.label = button.textContent; button.textContent = "送信中…"; }
+});
+// Pages restored from the back/forward cache keep the disabled state.
+window.addEventListener("pageshow", () => {
+  for (const form of document.querySelectorAll("form[data-sent]")) {
+    delete form.dataset.sent;
+    const button = form.querySelector("button[type=submit]");
+    if (button) { button.disabled = false; button.textContent = button.dataset.label; }
+  }
+});
+document.querySelector("[aria-invalid=true]")?.focus();
+document.addEventListener("click", async (event) => {
+  const button = event.target.closest("[data-copy]");
+  if (!button) return;
+  try {
+    await navigator.clipboard.writeText(button.dataset.copy);
+    button.textContent = "コピーしました";
+  } catch {
+    button.textContent = "コピーできませんでした";
+  }
+  setTimeout(() => { button.textContent = "コピー"; }, 2000);
+});
 `);
 
 // `html` escapes every interpolated value, so Backlog-provided labels are safe.
@@ -198,6 +261,7 @@ export function layout(title: string, body: Html, head: Html = html``): Html {
   </head>
   <body>
     <main><div class="card">${body}</div></main>
+    <script>${script}</script>
   </body>
 </html>`;
 }

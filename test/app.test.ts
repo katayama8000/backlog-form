@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { ReauthRequiredError } from "../src/backlog/client.ts";
+import type { CustomField } from "../src/backlog/types.ts";
 import { schema } from "./fixtures.ts";
 import { post, setup } from "./helpers.ts";
 
@@ -11,7 +12,9 @@ function withForm(overrides: { fieldIds?: number[]; enabled?: boolean } = {}) {
     projectId: 1,
     projectName: "Test",
     issueTypeId: 5,
+    issueTypeName: "お問い合わせ",
     title: "お問い合わせ",
+    description: "",
     fieldIds: [11, 12, 13],
     enabled: true,
     ...overrides,
@@ -99,4 +102,26 @@ test("escapes values coming from Backlog", async () => {
   client.getCustomFields = async () => [{ ...schema.fields[0]!, name: "<script>x</script>" }];
   const body = await (await app.request(url)).text();
   assert.doesNotMatch(body, /<script>x<\/script>/);
+});
+
+test("shows the form's description and a link to submit again", async () => {
+  const ctx = withForm();
+  ctx.store.updateForm(ctx.form.id, { ...ctx.form, description: "3 営業日以内に回答します" });
+  assert.match(await (await ctx.app.request(ctx.url)).text(), /<p class="form-description">3 営業日以内に回答します<\/p>/);
+  const done = await (await ctx.app.fetch(post(ctx.url, { summary: "件名", cf_10: "Nulab" }))).text();
+  assert.match(done, new RegExp(`href="/f/${ctx.form.id}">続けて送信する`));
+});
+
+test("summarizes validation errors at the top", async () => {
+  const { app, url } = withForm();
+  const body = await (await app.fetch(post(url, { summary: "", cf_10: "" }))).text();
+  assert.match(body, /入力内容を確認してください（2 件）/);
+});
+
+test("renders multiple lists as checkboxes", async () => {
+  const { app, client, url } = withForm({ fieldIds: [13] });
+  client.getCustomFields = async () => [{ ...schema.fields[3]!, typeId: 6 } as CustomField];
+  const body = await (await app.request(url)).text();
+  assert.match(body, /type="checkbox" name="cf_13" value="100"/);
+  assert.doesNotMatch(body, /<select[^>]*multiple/);
 });

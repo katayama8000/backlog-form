@@ -23,7 +23,11 @@ export type FormRecord = {
   projectId: number;
   projectName: string;
   issueTypeId: number;
+  // Empty for forms created before the name was stored.
+  issueTypeName: string;
   title: string;
+  // Shown under the title on the public form.
+  description: string;
   // Custom fields shown on the form. Required fields are always shown.
   fieldIds: number[];
   enabled: boolean;
@@ -55,7 +59,9 @@ CREATE TABLE IF NOT EXISTS forms (
   project_id INTEGER NOT NULL,
   project_name TEXT NOT NULL,
   issue_type_id INTEGER NOT NULL,
+  issue_type_name TEXT NOT NULL DEFAULT '',
   title TEXT NOT NULL,
+  description TEXT NOT NULL DEFAULT '',
   field_ids TEXT NOT NULL,
   enabled INTEGER NOT NULL DEFAULT 1,
   created_at INTEGER NOT NULL
@@ -64,11 +70,23 @@ CREATE TABLE IF NOT EXISTS forms (
 
 type Row = Record<string, string | number | null>;
 
+// Columns added after the first release, for databases created before them.
+const ADDED_FORM_COLUMNS = {
+  issue_type_name: "TEXT NOT NULL DEFAULT ''",
+  description: "TEXT NOT NULL DEFAULT ''",
+};
+
 // Tokens are encrypted at rest; everything else is stored as is.
 export function openStore(path: string, encryptionKey: Buffer) {
   const db = new DatabaseSync(path);
   db.exec("PRAGMA foreign_keys = ON; PRAGMA journal_mode = WAL;");
   db.exec(SCHEMA);
+  const existing = new Set(
+    (db.prepare("PRAGMA table_info(forms)").all() as Row[]).map((c) => String(c.name)),
+  );
+  for (const [column, type] of Object.entries(ADDED_FORM_COLUMNS)) {
+    if (!existing.has(column)) db.exec(`ALTER TABLE forms ADD COLUMN ${column} ${type}`);
+  }
 
   const seal = (value: string) => encrypt(encryptionKey, value);
   const open = (value: unknown) => decrypt(encryptionKey, String(value));
@@ -93,7 +111,9 @@ export function openStore(path: string, encryptionKey: Buffer) {
       projectId: Number(row.project_id),
       projectName: String(row.project_name),
       issueTypeId: Number(row.issue_type_id),
+      issueTypeName: String(row.issue_type_name),
       title: String(row.title),
+      description: String(row.description),
       fieldIds: JSON.parse(String(row.field_ids)) as number[],
       enabled: row.enabled === 1,
       createdAt: Number(row.created_at),
@@ -184,15 +204,17 @@ export function openStore(path: string, encryptionKey: Buffer) {
     createForm(input: FormInput): FormRecord {
       const id = randomId();
       db.prepare(
-        `INSERT INTO forms (id, connection_id, project_id, project_name, issue_type_id, title, field_ids, enabled, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO forms (id, connection_id, project_id, project_name, issue_type_id, issue_type_name, title, description, field_ids, enabled, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       ).run(
         id,
         input.connectionId,
         input.projectId,
         input.projectName,
         input.issueTypeId,
+        input.issueTypeName,
         input.title,
+        input.description,
         JSON.stringify(input.fieldIds),
         input.enabled ? 1 : 0,
         Date.now(),
@@ -200,9 +222,16 @@ export function openStore(path: string, encryptionKey: Buffer) {
       return getForm(id)!;
     },
 
-    updateForm(id: string, patch: Pick<FormRecord, "title" | "fieldIds" | "enabled">): void {
-      db.prepare("UPDATE forms SET title = ?, field_ids = ?, enabled = ? WHERE id = ?").run(
+    updateForm(
+      id: string,
+      patch: Pick<FormRecord, "issueTypeName" | "title" | "description" | "fieldIds" | "enabled">,
+    ): void {
+      db.prepare(
+        "UPDATE forms SET issue_type_name = ?, title = ?, description = ?, field_ids = ?, enabled = ? WHERE id = ?",
+      ).run(
+        patch.issueTypeName,
         patch.title,
+        patch.description,
         JSON.stringify(patch.fieldIds),
         patch.enabled ? 1 : 0,
         id,

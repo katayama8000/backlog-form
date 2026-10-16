@@ -14,6 +14,8 @@ export type FormView = {
   input?: RawInput;
   errors?: Record<string, string>;
   turnstileSiteKey?: string | undefined;
+  // Shown to the form's creator: submitting is disabled.
+  preview?: boolean;
 };
 
 function single(input: RawInput | undefined, name: string): string {
@@ -52,11 +54,9 @@ function listControl(field: ListField, view: FormView) {
   const error = view.errors?.[name];
 
   switch (field.typeId) {
-    case CustomFieldType.SingleList:
-    case CustomFieldType.MultipleList: {
-      const multiple = field.typeId === CustomFieldType.MultipleList;
-      return html`<select id="${name}" name="${name}" ${multiple ? "multiple" : ""} ${invalid(error)}>
-        ${multiple ? "" : html`<option value="">選択してください</option>`}
+    case CustomFieldType.SingleList: {
+      return html`<select id="${name}" name="${name}" ${invalid(error)}>
+        <option value="">選択してください</option>
         ${sortedItems(field).map(
           (item) =>
             html`<option value="${item.id}" ${selected.has(String(item.id)) ? "selected" : ""}>${item.name}</option>`,
@@ -64,7 +64,9 @@ function listControl(field: ListField, view: FormView) {
       </select>`;
     }
     default: {
-      const type = field.typeId === CustomFieldType.Checkbox ? "checkbox" : "radio";
+      // Multiple lists are shown as checkboxes too: <select multiple> needs
+      // Ctrl/Cmd-click and is awkward on phones.
+      const type = field.typeId === CustomFieldType.Radio ? "radio" : "checkbox";
       return html`<div class="choices">${sortedItems(field).map(
         (item) =>
           html`<label class="choice"><input type="${type}" name="${name}" value="${item.id}" ${selected.has(String(item.id)) ? "checked" : ""} ${invalid(error)} />${item.name}</label>`,
@@ -102,7 +104,7 @@ function fieldRow(field: CustomField, view: FormView) {
   const name = names.field(field);
   const error = view.errors?.[name];
   // Checkbox and radio groups need a fieldset so the label covers the whole group.
-  if (field.typeId === CustomFieldType.Checkbox || field.typeId === CustomFieldType.Radio) {
+  if (isListField(field) && field.typeId !== CustomFieldType.SingleList) {
     return html`<fieldset class="field">
       <legend>${label(field.name, field.required)}</legend>
       ${hintText(field.description)}${fieldControl(field, view)}${errorText(error)}
@@ -122,12 +124,21 @@ export function renderForm(view: FormView): Html {
   const turnstileWidget = view.turnstileSiteKey
     ? html`<div class="cf-turnstile" data-sitekey="${view.turnstileSiteKey}"></div>`
     : html``;
-  const formError = errors?.form ? html`<p class="alert" role="alert">${errors.form}</p>` : html``;
+  const fieldErrors = Object.keys(errors ?? {}).filter((key) => key !== "form").length;
+  const formError = errors?.form
+    ? html`<p class="alert" role="alert">${errors.form}</p>`
+    : fieldErrors
+      ? html`<p class="alert" role="alert">入力内容を確認してください（${fieldErrors} 件）</p>`
+      : html``;
+  const preview = view.preview
+    ? html`<p class="notice preview-banner">プレビュー（送信はできません）</p>`
+    : html``;
 
-  const body = html`<h1>${schema.title}</h1>
-    <p class="lead">以下のフォームに入力して送信してください。<span class="req">必須</span> の項目は入力が必要です。</p>
+  const body = html`${preview}<h1>${schema.title}</h1>
+    ${schema.description ? html`<p class="form-description">${schema.description}</p>` : ""}
+    <p class="lead"><span class="req">必須</span> の項目は入力が必要です。</p>
     ${formError}
-    <form method="post">
+    <form method="post" data-once ${view.preview ? html`onsubmit="return false"` : ""}>
       <div class="field">
         <label class="label" for="${names.summary}">${label("件名", true)}</label>
         <input type="text" id="${names.summary}" name="${names.summary}" value="${single(input, names.summary)}" maxlength="255" required ${invalid(errors?.[names.summary])} />
@@ -141,18 +152,20 @@ export function renderForm(view: FormView): Html {
       <input class="hp" name="${names.honeypot}" tabindex="-1" autocomplete="off" aria-hidden="true" />
       <hr class="divider" />
       ${turnstileWidget}
-      <button type="submit">送信する</button>
+      <button type="submit" ${view.preview ? "disabled" : ""}>送信する</button>
     </form>`;
   return layout(schema.title, body, turnstileHead);
 }
 
-export function renderDone(schema: FormSchema): Html {
+// formPath links back to an empty form for another submission.
+export function renderDone(schema: FormSchema, formPath: string): Html {
   return layout(
     schema.title,
     html`<div class="done">
       <div class="done-mark" aria-hidden="true">✓</div>
       <h1>送信しました</h1>
-      <p>お問い合わせを受け付けました。担当者からの連絡をお待ちください。</p>
+      <p>「${schema.title}」の内容を受け付けました。</p>
+      <p style="margin-top:16px"><a href="${formPath}">続けて送信する</a></p>
     </div>`,
   );
 }

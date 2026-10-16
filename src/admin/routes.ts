@@ -3,8 +3,9 @@ import { deleteCookie, getCookie, getSignedCookie, setCookie, setSignedCookie } 
 import type { CookieOptions } from "hono/utils/cookie";
 import type { BacklogClient, BacklogGateway, OAuthProvider } from "../backlog/client.ts";
 import { parseSpaceHost } from "../backlog/oauth.ts";
-import { applicableFields, type SchemaLoader } from "../backlog/schema.ts";
+import { applicableFields, FormUnavailableError, type SchemaLoader } from "../backlog/schema.ts";
 import { randomId } from "../crypto.ts";
+import { renderForm } from "../form/render.ts";
 import type { Connection, Store } from "../store.ts";
 import {
   type EditorView,
@@ -14,6 +15,8 @@ import {
   renderLanding,
   renderPickIssueType,
   renderPickProject,
+  TOASTS,
+  type ToastKey,
 } from "./render.ts";
 
 export type AdminDeps = {
@@ -29,8 +32,10 @@ type Env = { Variables: { connection: Connection } };
 
 const SESSION_COOKIE = "session";
 const STATE_COOKIE = "oauth_state";
+const FLASH_COOKIE = "flash";
 const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 const TITLE_MAX = 100;
+const DESCRIPTION_MAX = 1000;
 
 // Project, issue type and its applicable fields, as visible to the signed-in user.
 async function loadTarget(client: BacklogClient, projectId: number, issueTypeId: number) {
@@ -53,14 +58,16 @@ function toId(value: unknown): number | undefined {
 function readEditor(data: FormData, applicable: { id: number }[]) {
   const allowed = new Set(applicable.map((f) => f.id));
   const title = String(data.get("title") ?? "").trim();
+  const description = String(data.get("description") ?? "").trim();
   const fieldIds = data
     .getAll("fieldIds")
     .map(toId)
     .filter((id): id is number => id !== undefined && allowed.has(id));
-  const values = { title, fieldIds, enabled: data.get("enabled") === "1" };
+  const values = { title, description, fieldIds, enabled: data.get("enabled") === "1" };
   const errors: Record<string, string> = {};
   if (title === "") errors.title = "入力してください";
   else if (title.length > TITLE_MAX) errors.title = `${TITLE_MAX} 文字以内で入力してください`;
+  if (description.length > DESCRIPTION_MAX) errors.description = `${DESCRIPTION_MAX} 文字以内で入力してください`;
   return { values, errors: Object.keys(errors).length ? errors : undefined };
 }
 
@@ -74,6 +81,19 @@ export function adminRoutes(deps: AdminDeps) {
     path: "/",
   };
   const formUrl = (id: string) => `${deps.appUrl}/f/${id}`;
+
+  // A toast for the page the next redirect lands on.
+  function setFlash(c: Context, key: ToastKey) {
+    setCookie(c, FLASH_COOKIE, key, { ...cookie, maxAge: 60 });
+  }
+
+  // Reads and clears the flash cookie. Unknown values are ignored.
+  function takeFlash(c: Context): ToastKey | undefined {
+    const key = getCookie(c, FLASH_COOKIE);
+    if (key === undefined) return undefined;
+    deleteCookie(c, FLASH_COOKIE, { path: "/" });
+    return Object.hasOwn(TOASTS, key) ? (key as ToastKey) : undefined;
+  }
 
   function currentConnection(c: Context): Connection | undefined {
     const token = getCookie(c, SESSION_COOKIE);
@@ -145,7 +165,8 @@ export function adminRoutes(deps: AdminDeps) {
 
   app.get("/forms", (c) => {
     const connection = c.get("connection");
-    return c.html(renderFormList(connection, store.listForms(connection.id)));
+    const forms = store.listForms(connection.id).map((form) => ({ ...form, url: formUrl(form.id) }));
+    return c.html(renderFormList(connection, forms, takeFlash(c)));
   });
 
   // A three-step wizard driven by query parameters: project → issue type → settings.
@@ -163,7 +184,12 @@ export function adminRoutes(deps: AdminDeps) {
     if (issueTypeId === undefined) {
       const project = await client.findProject(projectId);
       if (!project || project.archived) return notFound();
-      return c.html(renderPickIssueType(connection, project, await client.getIssueTypes(projectId)));
+      const [issueTypes, customFields] = await Promise.all([
+        client.getIssueTypes(projectId),
+        client.getCustomFields(projectId),
+      ]);
+      const fieldsByType = new Map(issueTypes.map((t) => [t.id, applicableFields(customFields, t.id)]));
+      return c.html(renderPickIssueType(connection, project, issueTypes, fieldsByType));
     }
     const target = await loadTarget(client, projectId, issueTypeId);
     if (!target) return notFound();
@@ -171,7 +197,7 @@ export function adminRoutes(deps: AdminDeps) {
       renderEditor({
         connection,
         ...target,
-        values: { title: target.issueType.name, fieldIds: [], enabled: true },
+        values: { title: target.issueType.name, description: "", fieldIds: [], enabled: true },
       }),
     );
   });
@@ -198,8 +224,10 @@ export function adminRoutes(deps: AdminDeps) {
       projectId: target.project.id,
       projectName: target.project.name,
       issueTypeId: target.issueType.id,
+      issueTypeName: target.issueType.name,
       ...values,
     });
+    setFlash(c, "created");
     return c.redirect(`/forms/${form.id}`);
   });
 
@@ -233,7 +261,24 @@ export function adminRoutes(deps: AdminDeps) {
     const view = await editorFor(c);
     if (view instanceof Response) return view;
     const form = ownForm(c)!;
-    return c.html(renderEditor({ ...view, values: form }));
+    return c.html(renderEditor({ ...view, values: form, toast: takeFlash(c) }));
+  });
+
+  // The public form as submitters see it, even while it's not published.
+  app.get("/forms/:id/preview", async (c) => {
+    const form = ownForm(c);
+    if (!form) {
+      return c.html(renderAdminMessage(c.get("connection"), "見つかりません", "フォームが見つかりません。"), 404);
+    }
+    try {
+      return c.html(renderForm({ schema: await schemas.load(form, { fresh: true }), preview: true }));
+    } catch (error) {
+      if (!(error instanceof FormUnavailableError)) throw error;
+      return c.html(
+        renderAdminMessage(c.get("connection"), "プレビューできません", "このフォームのプロジェクトまたは課題種別が見つかりません。"),
+        409,
+      );
+    }
   });
 
   app.post("/forms/:id", async (c) => {
@@ -241,8 +286,10 @@ export function adminRoutes(deps: AdminDeps) {
     if (view instanceof Response) return view;
     const { values, errors } = readEditor(await c.req.formData(), view.fields);
     if (errors) return c.html(renderEditor({ ...view, values, errors }), 400);
-    store.updateForm(view.form!.id, values);
+    // Also refreshes the issue type name, which older forms don't have.
+    store.updateForm(view.form!.id, { ...values, issueTypeName: view.issueType.name });
     schemas.invalidate(view.form!.id);
+    setFlash(c, "saved");
     return c.redirect(`/forms/${view.form!.id}`);
   });
 
@@ -251,6 +298,7 @@ export function adminRoutes(deps: AdminDeps) {
     if (form) {
       store.deleteForm(form.id);
       schemas.invalidate(form.id);
+      setFlash(c, "deleted");
     }
     return c.redirect("/forms");
   });
