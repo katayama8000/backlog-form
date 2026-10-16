@@ -22,11 +22,11 @@ Backlog アカウントを持たない**社外の人**が、Web フォームか�
 
 | 役割 | 採用 | メモ |
 |---|---|---|
-| ランタイム | Node.js 24 | 型を除去して `.ts` を直接実行するため、ビルド手順はない |
+| ランタイム | Node.js 26 | 型を除去して `.ts` を直接実行するため、ビルド手順はない |
 | 型チェック | TypeScript 7 | `tsc` は型チェック専用（`noEmit`）。`erasableSyntaxOnly` で enum などは使わない |
 | Web | Hono + @hono/node-server | |
 | HTML | `hono/html` のタグ付きテンプレート | JSX は Node の型除去では動かないため不採用。埋め込んだ値は自動でエスケープされる |
-| Backlog API | `fetch` の薄いラッパー | 使うエンドポイントが 4 つだけなので SDK は入れていない |
+| Backlog API | [backlog-js](https://github.com/nulab/backlog-js) | 公式 SDK。`client.ts` で使う 4 つのエンドポイントだけを `BacklogClient` として包み、テストではこれを差し替える |
 | バリデーション | 自前実装 | カスタム属性ごとの動的なルールとエラーメッセージを扱いやすいため |
 | スパム対策 | ハニーポット + Cloudflare Turnstile（任意） | |
 | スタイル | Pico.css（CDN） | |
@@ -48,7 +48,7 @@ src/
 ├── turnstile.ts
 ├── backlog/
 │   ├── types.ts        # カスタム属性の型（typeId 1〜8）
-│   ├── client.ts       # Backlog API クライアント
+│   ├── client.ts       # backlog-js のアダプタ
 │   └── schema.ts       # フォーム定義の取得とキャッシュ
 └── form/
     ├── input.ts        # input の name 規約と FormData の正規化

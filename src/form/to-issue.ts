@@ -1,3 +1,4 @@
+import type { IssueParams } from "../backlog/client.ts";
 import type { FormSchema } from "../backlog/schema.ts";
 import type { FormDefinition } from "../forms.ts";
 import type { Submission } from "./validate.ts";
@@ -6,21 +7,23 @@ export function toIssueParams(
   form: FormDefinition,
   schema: FormSchema,
   submission: Submission,
-): URLSearchParams {
-  const params = new URLSearchParams({
-    projectId: String(schema.project.id),
-    issueTypeId: String(schema.issueType.id),
-    priorityId: String(form.priorityId),
+): IssueParams {
+  const params: IssueParams = {
+    projectId: schema.project.id,
+    issueTypeId: schema.issueType.id,
+    priorityId: form.priorityId,
     summary: submission.summary,
-  });
+  };
   if (submission.description !== "") {
-    params.set("description", submission.description);
+    params.description = submission.description;
   }
   for (const { field, values, otherValue } of submission.fields) {
-    // Multi-value fields repeat the same key, one entry per item id.
-    for (const value of values) params.append(`customField_${field.id}`, value);
+    // backlog-js expands arrays into indexed customField_N[i] keys.
+    if (values.length > 0) {
+      params[`customField_${field.id}`] = values.length === 1 ? values[0] : values;
+    }
     if (otherValue !== "") {
-      params.set(`customField_${field.id}_otherValue`, otherValue);
+      params[`customField_${field.id}_otherValue`] = otherValue;
     }
   }
   return params;

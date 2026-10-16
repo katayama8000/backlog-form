@@ -10,15 +10,16 @@
   "type": "module",
   "dependencies": {
     "@hono/node-server": "^2.1.5",
+    "backlog-js": "^1.0.0",
     "hono": "^4.13.13"
   },
   "devDependencies": {
-    "@types/node": "^24.19.2",
+    "@types/node": "^26.6.5",
     "typescript": "^7.0.2"
   },
   "private": true,
   "engines": {
-    "node": ">=24"
+    "node": ">=26"
   },
   "packageManager": "pnpm@11.25.0"
 }

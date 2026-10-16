@@ -8,7 +8,7 @@ See [DESIGN.md](./DESIGN.md) (Japanese) for design details.
 
 ## Requirements
 
-- Node.js 24+
+- Node.js 26+
 - pnpm
 - A Backlog API key, ideally for a bot user that will be shown as the issue creator
 
@@ -37,19 +37,18 @@ Add an entry to `src/forms.ts`:
 
 ### 3. Environment variables
 
-Create `.env` in the project root:
+Copy the template and fill in the values:
 
 ```sh
-BACKLOG_SPACE_URL=https://example.backlog.com
-BACKLOG_API_KEY=xxxxxxxx
-
-# Optional: Cloudflare Turnstile is enabled only when both are set
-TURNSTILE_SITE_KEY=
-TURNSTILE_SECRET_KEY=
-
-# Optional: defaults to 3000
-PORT=3000
+cp .env.example .env
 ```
+
+| Variable | Required | Description |
+|---|---|---|
+| `BACKLOG_SPACE_URL` | yes | e.g. `https://example.backlog.com` |
+| `BACKLOG_API_KEY` | yes | API key of the user shown as the issue creator |
+| `TURNSTILE_SITE_KEY` / `TURNSTILE_SECRET_KEY` | no | Cloudflare Turnstile is enabled only when both are set |
+| `PORT` | no | Defaults to `3000` |
 
 ### 4. Run
 

@@ -1,14 +1,14 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { createApp } from "../src/app.ts";
-import type { BacklogClient } from "../src/backlog/client.ts";
+import type { BacklogClient, IssueParams } from "../src/backlog/client.ts";
 import { forms } from "../src/forms.ts";
 import { form, schema } from "./fixtures.ts";
 
 forms.splice(0, forms.length, form);
 
 function fakeBacklog() {
-  const calls: URLSearchParams[] = [];
+  const calls: IssueParams[] = [];
   const client: BacklogClient = {
     getProject: async () => schema.project,
     getIssueTypes: async () => [schema.issueType],
@@ -45,10 +45,10 @@ test("creates an issue with custom field params", async () => {
   assert.equal(res.status, 200);
   const params = calls[0];
   assert.ok(params);
-  assert.equal(params.get("projectId"), "1");
-  assert.equal(params.get("issueTypeId"), "5");
-  assert.equal(params.get("customField_10"), "Nulab");
-  assert.deepEqual(params.getAll("customField_13"), ["100", "101"]);
+  assert.equal(params.projectId, 1);
+  assert.equal(params.issueTypeId, 5);
+  assert.equal(params.customField_10, "Nulab");
+  assert.deepEqual(params.customField_13, ["100", "101"]);
 });
 
 test("returns 400 and keeps input on validation errors", async () => {
