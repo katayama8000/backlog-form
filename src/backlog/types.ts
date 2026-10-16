@@ -9,7 +9,12 @@ export const CustomFieldType = {
   Radio: 8,
 } as const;
 
-export type Project = { id: number; projectKey: string; name: string };
+export type Project = {
+  id: number;
+  projectKey: string;
+  name: string;
+  archived: boolean;
+};
 
 export type IssueType = { id: number; projectId: number; name: string };
 

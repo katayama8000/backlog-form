@@ -1,4 +1,5 @@
 import {
+  Error as BacklogErrors,
   createClient,
   getCustomFields,
   getIssueTypes,
@@ -11,7 +12,8 @@ import type { CreatedIssue, CustomField, IssueType, Project } from "./types.ts";
 export type IssueParams = Option.Issue.PostIssueParams;
 
 export type BacklogClient = {
-  getProject(projectKey: string): Promise<Project>;
+  // Resolves to null when the project doesn't exist or isn't visible to the key.
+  findProject(projectKey: string): Promise<Project | null>;
   getIssueTypes(projectKey: string): Promise<IssueType[]>;
   getCustomFields(projectKey: string): Promise<CustomField[]>;
   addIssue(params: IssueParams): Promise<CreatedIssue>;
@@ -29,7 +31,19 @@ export function createBacklogClient(options: {
     apiKey: options.apiKey,
   });
   return {
-    getProject: (projectKey) => getProject(client, projectKey),
+    findProject: async (projectKey) => {
+      try {
+        return await getProject(client, projectKey);
+      } catch (error) {
+        if (
+          error instanceof BacklogErrors.BacklogApiError &&
+          (error.status === 403 || error.status === 404)
+        ) {
+          return null;
+        }
+        throw error;
+      }
+    },
     getIssueTypes: (projectKey) => getIssueTypes(client, projectKey),
     // Narrow the SDK's loose entity type to our discriminated union.
     getCustomFields: async (projectKey) =>

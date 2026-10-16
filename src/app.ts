@@ -1,7 +1,6 @@
 import { Hono } from "hono";
 import type { BacklogClient } from "./backlog/client.ts";
 import { createSchemaLoader } from "./backlog/schema.ts";
-import { findForm } from "./forms.ts";
 import { names, readInput } from "./form/input.ts";
 import { renderDone, renderForm, renderMessage } from "./form/render.ts";
 import { toIssueParams } from "./form/to-issue.ts";
@@ -16,27 +15,34 @@ export type AppDeps = {
 export function createApp({ backlog, turnstile }: AppDeps) {
   const schemas = createSchemaLoader(backlog);
   const app = new Hono();
+  const notFound = renderMessage("Not Found", "フォームが見つかりません");
 
-  app.get("/f/:slug", async (c) => {
-    const form = findForm(c.req.param("slug"));
-    if (!form) return c.html(renderMessage("Not Found", "フォームが見つかりません"), 404);
-    const schema = await schemas.load(form);
-    return c.html(renderForm({ form, schema, turnstileSiteKey: turnstile?.siteKey }));
+  // A form is a marked issue type in a marked project: /f/{projectKey}/{issueTypeId}.
+  function loadSchema(projectKey: string, issueTypeId: string, fresh = false) {
+    if (!/^[A-Z0-9_]+$/i.test(projectKey) || !/^\d+$/.test(issueTypeId)) {
+      return Promise.resolve(null);
+    }
+    return schemas.load(projectKey.toUpperCase(), Number(issueTypeId), { fresh });
+  }
+
+  app.get("/f/:projectKey/:issueTypeId", async (c) => {
+    const schema = await loadSchema(c.req.param("projectKey"), c.req.param("issueTypeId"));
+    if (!schema) return c.html(notFound, 404);
+    return c.html(renderForm({ schema, turnstileSiteKey: turnstile?.siteKey }));
   });
 
-  app.post("/f/:slug", async (c) => {
-    const form = findForm(c.req.param("slug"));
-    if (!form) return c.html(renderMessage("Not Found", "フォームが見つかりません"), 404);
-
-    const formData = await c.req.formData();
+  app.post("/f/:projectKey/:issueTypeId", async (c) => {
     // Validate against the latest definition in case Backlog settings changed
     // between rendering and submitting.
-    const schema = await schemas.load(form, { fresh: true });
+    const schema = await loadSchema(c.req.param("projectKey"), c.req.param("issueTypeId"), true);
+    if (!schema) return c.html(notFound, 404);
+
+    const formData = await c.req.formData();
     const input = readInput(formData, schema.fields);
-    const view = { form, schema, input, turnstileSiteKey: turnstile?.siteKey };
+    const view = { schema, input, turnstileSiteKey: turnstile?.siteKey };
 
     // Bots tend to fill every field; pretend success so they don't retry.
-    if (input[names.honeypot] !== "") return c.html(renderDone(form));
+    if (input[names.honeypot] !== "") return c.html(renderDone(schema));
 
     if (turnstile) {
       const token = formData.get("cf-turnstile-response");
@@ -54,7 +60,7 @@ export function createApp({ backlog, turnstile }: AppDeps) {
     if (!result.ok) return c.html(renderForm({ ...view, errors: result.errors }), 400);
 
     try {
-      await backlog.addIssue(toIssueParams(form, schema, result.submission));
+      await backlog.addIssue(toIssueParams(schema, result.submission));
     } catch (error) {
       console.error("Failed to create issue", error);
       return c.html(
@@ -62,7 +68,7 @@ export function createApp({ backlog, turnstile }: AppDeps) {
         502,
       );
     }
-    return c.html(renderDone(form));
+    return c.html(renderDone(schema));
   });
 
   app.onError((error, c) => {

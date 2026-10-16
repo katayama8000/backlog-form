@@ -16,26 +16,23 @@ See [DESIGN.md](./DESIGN.md) (Japanese) for design details.
 
 ### 1. Prepare Backlog
 
-1. In the target project, create an issue type dedicated to external submissions (e.g. "External inquiry").
-2. Create the custom fields you want on the form and apply them to that issue type.
+All configuration lives in Backlog. A name starting with `[form]` marks what the app may expose; the marker is stripped before display.
 
-**Every custom field applied to this issue type is shown publicly.** Don't put internal-only wording in field names or descriptions.
+| What | Mark it | Effect |
+|---|---|---|
+| Project | `[form] Customer support` | The app only looks at marked, non-archived projects |
+| Issue type | `[form] お問い合わせ` | Each marked issue type is one form; the rest of the name becomes its title |
+| Custom field | `[form] 会社名` | Only marked fields applied to the issue type appear on the form |
 
-### 2. Register the form
+1. Create a project whose name starts with `[form]`, and add the API key's user to it.
+2. Create an issue type whose name starts with `[form]`.
+3. Create the custom fields you want on the form, prefix their names with `[form]`, and apply them to that issue type.
 
-Add an entry to `src/forms.ts`:
+The form is served at `/f/{projectKey}/{issueTypeId}`, e.g. `/f/SUPPORT/12345`.
 
-```ts
-{
-  slug: "support",        // served at /f/support
-  title: "お問い合わせ",
-  projectKey: "EXAMPLE",
-  issueTypeId: 12345,     // the issue type created in step 1
-  priorityId: 3,          // priority for created issues (3 = Normal)
-}
-```
+Names and descriptions of marked fields are shown publicly. Unmarked fields stay internal, but a **required** custom field must be marked: Backlog would reject every submission otherwise, so the form fails to load instead.
 
-### 3. Environment variables
+### 2. Environment variables
 
 Copy the template and fill in the values:
 
@@ -50,14 +47,14 @@ cp .env.example .env
 | `TURNSTILE_SITE_KEY` / `TURNSTILE_SECRET_KEY` | no | Cloudflare Turnstile is enabled only when both are set |
 | `PORT` | no | Defaults to `3000` |
 
-### 4. Run
+### 3. Run
 
 ```sh
 pnpm install
 pnpm dev
 ```
 
-Open `http://localhost:3000/f/support`.
+Open `http://localhost:3000/f/{projectKey}/{issueTypeId}`.
 
 ## Scripts
 

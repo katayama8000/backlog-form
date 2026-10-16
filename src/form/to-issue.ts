@@ -1,17 +1,18 @@
 import type { IssueParams } from "../backlog/client.ts";
 import type { FormSchema } from "../backlog/schema.ts";
-import type { FormDefinition } from "../forms.ts";
 import type { Submission } from "./validate.ts";
 
+// Backlog requires a priority on issue creation. 3 is "Normal".
+const PRIORITY_NORMAL = 3;
+
 export function toIssueParams(
-  form: FormDefinition,
   schema: FormSchema,
   submission: Submission,
 ): IssueParams {
   const params: IssueParams = {
     projectId: schema.project.id,
     issueTypeId: schema.issueType.id,
-    priorityId: form.priorityId,
+    priorityId: PRIORITY_NORMAL,
     summary: submission.summary,
   };
   if (submission.description !== "") {

@@ -1,6 +1,5 @@
 import type { FormSchema } from "../src/backlog/schema.ts";
 import type { CustomField } from "../src/backlog/types.ts";
-import type { FormDefinition } from "../src/forms.ts";
 
 const base = { projectId: 1, description: "", required: false, applicableIssueTypes: [] };
 
@@ -21,16 +20,9 @@ export const checkboxField: CustomField = {
 
 export const fields = [textField, numberField, dateField, checkboxField];
 
-export const form: FormDefinition = {
-  slug: "support",
-  title: "お問い合わせ",
-  projectKey: "TEST",
-  issueTypeId: 5,
-  priorityId: 3,
-};
-
 export const schema: FormSchema = {
-  project: { id: 1, projectKey: "TEST", name: "Test" },
-  issueType: { id: 5, projectId: 1, name: "外部問い合わせ" },
+  project: { id: 1, projectKey: "TEST", name: "[form] Test", archived: false },
+  issueType: { id: 5, projectId: 1, name: "[form] お問い合わせ" },
+  title: "お問い合わせ",
   fields,
 };
