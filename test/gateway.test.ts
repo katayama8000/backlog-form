@@ -7,7 +7,8 @@ import { afterEach, test } from "node:test";
 import { Error as BacklogErrors } from "backlog-js";
 import { createBacklogGateway, type OAuthProvider, ReauthRequiredError } from "../src/backlog/client.ts";
 import { deriveKey } from "../src/crypto.ts";
-import { openStore } from "../src/store.ts";
+import { createBackend } from "../src/backend.ts";
+import { openStore } from "../src/node-sqlite.ts";
 
 const HOUR = 60 * 60 * 1000;
 const realFetch = globalThis.fetch;
@@ -45,7 +46,7 @@ function setup(expiresAt: number, refresh: OAuthProvider["refresh"]) {
     refreshToken: "r1",
     expiresAt,
   });
-  return { store, gateway: createBacklogGateway(store, oauth), connection, refreshes: () => refreshes };
+  return { store, gateway: createBacklogGateway(createBackend(store, oauth.refresh)), connection, refreshes: () => refreshes };
 }
 
 test("uses the stored token while it is valid", async () => {
@@ -70,6 +71,21 @@ test("refreshes an expired token once for concurrent requests", async () => {
   const saved = store.getConnection(connection.id)!;
   assert.equal(saved.accessToken, "new");
   assert.equal(saved.refreshToken, "r2");
+});
+
+test("reuses a token another isolate already refreshed", async () => {
+  const { store, gateway, connection, refreshes } = setup(Date.now() - 1, async () => ({
+    accessToken: "new",
+    refreshToken: "r2",
+    expiresAt: Date.now() + HOUR,
+  }));
+  const calls = stubFetch({ id: 1, userId: "alice", name: "Alice" });
+  // Each Worker isolate holds its own copy of the expired connection.
+  const other = store.getConnection(connection.id)!;
+  await gateway.forConnection(connection).getMyself();
+  await gateway.forConnection(other).getMyself();
+  assert.equal(refreshes(), 1);
+  assert.deepEqual(calls, ["Bearer new", "Bearer new"]);
 });
 
 test("flags the connection when the refresh token is rejected", async () => {

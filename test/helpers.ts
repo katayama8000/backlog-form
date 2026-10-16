@@ -1,7 +1,8 @@
 import { createApp } from "../src/app.ts";
 import type { BacklogClient, BacklogGateway, IssueParams, OAuthProvider } from "../src/backlog/client.ts";
 import { deriveKey } from "../src/crypto.ts";
-import { openStore } from "../src/store.ts";
+import { createBackend } from "../src/backend.ts";
+import { openStore } from "../src/node-sqlite.ts";
 import { schema } from "./fixtures.ts";
 
 export const APP_URL = "http://localhost";
@@ -28,7 +29,8 @@ export function setup() {
     exchangeCode: async () => ({ accessToken: "access", refreshToken: "refresh", expiresAt: Date.now() + HOUR }),
     refresh: async () => ({ accessToken: "access2", refreshToken: "refresh2", expiresAt: Date.now() + HOUR }),
   };
-  const app = createApp({ store, gateway, oauth, turnstile: null, appUrl: APP_URL, cookieSecret: "cookie-secret" });
+  // Tests set up and inspect data through the synchronous store directly.
+  const app = createApp({ store: createBackend(store, oauth.refresh), gateway, oauth, turnstile: null, appUrl: APP_URL, cookieSecret: "cookie-secret" });
   const connection = store.upsertConnection({
     spaceHost: "example.backlog.com",
     userId: 1,

@@ -9,7 +9,8 @@ import {
   type Option,
   postIssue,
 } from "backlog-js";
-import type { Connection, Store, Tokens } from "../store.ts";
+import { type Backend, EXPIRY_MARGIN_MS } from "../backend.ts";
+import type { Connection, Tokens } from "../store.ts";
 import type { CreatedIssue, CustomField, IssueType, Project, User } from "./types.ts";
 
 export type IssueParams = Option.Issue.PostIssueParams;
@@ -69,37 +70,12 @@ function clientFor(spaceHost: string, accessToken: string): BacklogClient {
   };
 }
 
-// Refresh a minute early so a token doesn't expire mid-request.
-const EXPIRY_MARGIN_MS = 60 * 1000;
-
-export function createBacklogGateway(store: Store, oauth: OAuthProvider): BacklogGateway {
-  // One refresh per connection at a time; concurrent requests share it.
-  const refreshing = new Map<string, Promise<string>>();
-
-  function refresh(connection: Connection): Promise<string> {
-    const pending = refreshing.get(connection.id);
-    if (pending) return pending;
-    const task = (async () => {
-      // Another request may have refreshed already; use the stored tokens.
-      const latest = store.getConnection(connection.id) ?? connection;
-      if (latest.expiresAt - EXPIRY_MARGIN_MS > Date.now() && latest.accessToken !== connection.accessToken) {
-        return latest.accessToken;
-      }
-      try {
-        const tokens = await oauth.refresh(latest.spaceHost, latest.refreshToken);
-        store.updateTokens(latest.id, tokens);
-        Object.assign(connection, tokens);
-        return tokens.accessToken;
-      } catch (error) {
-        if (error instanceof BacklogErrors.BacklogError && error.status < 500) {
-          store.markNeedsReauth(latest.id);
-          throw new ReauthRequiredError(`Connection ${latest.id} needs to sign in again`);
-        }
-        throw error;
-      }
-    })().finally(() => refreshing.delete(connection.id));
-    refreshing.set(connection.id, task);
-    return task;
+export function createBacklogGateway(backend: Pick<Backend, "refreshAccessToken">): BacklogGateway {
+  async function refresh(connection: Connection): Promise<string> {
+    const result = await backend.refreshAccessToken(connection.id, connection.accessToken);
+    if (result === "reauth") throw new ReauthRequiredError(`Connection ${connection.id} needs to sign in again`);
+    Object.assign(connection, result);
+    return result.accessToken;
   }
 
   async function accessToken(connection: Connection): Promise<string> {

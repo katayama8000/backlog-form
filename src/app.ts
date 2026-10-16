@@ -9,11 +9,12 @@ import { renderDone, renderForm, renderMessage } from "./form/render.ts";
 import { toIssueParams } from "./form/to-issue.ts";
 import { validate } from "./form/validate.ts";
 import { renderLanding } from "./admin/render.ts";
-import type { FormRecord, Store } from "./store.ts";
+import type { Backend } from "./backend.ts";
+import type { FormRecord } from "./store.ts";
 import { verifyTurnstile } from "./turnstile.ts";
 
 export type AppDeps = {
-  store: Store;
+  store: Backend;
   gateway: BacklogGateway;
   oauth: OAuthProvider;
   turnstile: { siteKey: string; secretKey: string } | null;
@@ -39,7 +40,7 @@ export function createApp(deps: AppDeps) {
     c: Context,
     fresh = false,
   ): Promise<{ form: FormRecord; schema: FormSchema } | Response> {
-    const form = store.getForm(c.req.param("formId") ?? "");
+    const form = await store.getForm(c.req.param("formId") ?? "");
     if (!form || !form.enabled) return c.html(notFound, 404);
     try {
       return { form, schema: await schemas.load(form, { fresh }) };
@@ -89,7 +90,7 @@ export function createApp(deps: AppDeps) {
     if (!result.ok) return c.html(renderForm({ ...view, errors: result.errors }), 400);
 
     try {
-      const connection = store.getConnection(form.connectionId);
+      const connection = await store.getConnection(form.connectionId);
       if (!connection) throw new FormUnavailableError(`Connection of form ${form.id} is gone`);
       await gateway.forConnection(connection).addIssue(toIssueParams(schema, result.submission));
     } catch (error) {

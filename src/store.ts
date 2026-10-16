@@ -1,4 +1,3 @@
-import { DatabaseSync } from "node:sqlite";
 import { decrypt, encrypt, randomId, sha256 } from "./crypto.ts";
 
 // A Backlog user who authorized this app via OAuth, in one space.
@@ -36,6 +35,16 @@ export type FormRecord = {
 
 export type FormInput = Omit<FormRecord, "id" | "createdAt">;
 
+type Row = Record<string, unknown>;
+
+// The SQLite flavors this store runs on: node:sqlite locally and in tests,
+// a Durable Object's storage on Cloudflare.
+export type SqlDriver = {
+  // Runs one or more statements without parameters.
+  exec(sql: string): void;
+  all(sql: string, ...params: unknown[]): Row[];
+};
+
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS connections (
   id TEXT PRIMARY KEY,
@@ -68,8 +77,6 @@ CREATE TABLE IF NOT EXISTS forms (
 );
 `;
 
-type Row = Record<string, string | number | null>;
-
 // Columns added after the first release, for databases created before them.
 const ADDED_FORM_COLUMNS = {
   issue_type_name: "TEXT NOT NULL DEFAULT ''",
@@ -77,17 +84,18 @@ const ADDED_FORM_COLUMNS = {
 };
 
 // Tokens are encrypted at rest; everything else is stored as is.
-export function openStore(path: string, encryptionKey: Buffer) {
-  const db = new DatabaseSync(path);
-  db.exec("PRAGMA foreign_keys = ON; PRAGMA journal_mode = WAL;");
-  db.exec(SCHEMA);
-  const existing = new Set(
-    (db.prepare("PRAGMA table_info(forms)").all() as Row[]).map((c) => String(c.name)),
-  );
+export function createStore(sql: SqlDriver, encryptionKey: Buffer) {
+  sql.exec(SCHEMA);
   for (const [column, type] of Object.entries(ADDED_FORM_COLUMNS)) {
-    if (!existing.has(column)) db.exec(`ALTER TABLE forms ADD COLUMN ${column} ${type}`);
+    try {
+      sql.exec(`ALTER TABLE forms ADD COLUMN ${column} ${type}`);
+    } catch (error) {
+      if (!String(error).includes("duplicate column")) throw error;
+    }
   }
 
+  const one = (query: string, ...params: unknown[]): Row | undefined => sql.all(query, ...params)[0];
+  const run = (query: string, ...params: unknown[]): void => void sql.all(query, ...params);
   const seal = (value: string) => encrypt(encryptionKey, value);
   const open = (value: unknown) => decrypt(encryptionKey, String(value));
 
@@ -100,7 +108,7 @@ export function openStore(path: string, encryptionKey: Buffer) {
       accessToken: open(row.access_token),
       refreshToken: open(row.refresh_token),
       expiresAt: Number(row.expires_at),
-      needsReauth: row.needs_reauth === 1,
+      needsReauth: Number(row.needs_reauth) === 1,
     };
   }
 
@@ -115,25 +123,25 @@ export function openStore(path: string, encryptionKey: Buffer) {
       title: String(row.title),
       description: String(row.description),
       fieldIds: JSON.parse(String(row.field_ids)) as number[],
-      enabled: row.enabled === 1,
+      enabled: Number(row.enabled) === 1,
       createdAt: Number(row.created_at),
     };
   }
 
   function getConnection(id: string): Connection | undefined {
-    const row = db.prepare("SELECT * FROM connections WHERE id = ?").get(id) as Row | undefined;
+    const row = one("SELECT * FROM connections WHERE id = ?", id);
     return row && toConnection(row);
   }
 
   function getForm(id: string): FormRecord | undefined {
-    const row = db.prepare("SELECT * FROM forms WHERE id = ?").get(id) as Row | undefined;
+    const row = one("SELECT * FROM forms WHERE id = ?", id);
     return row && toForm(row);
   }
 
   return {
     // Signing in again replaces the tokens of the same Backlog user.
     upsertConnection(input: Omit<Connection, "id" | "needsReauth">): Connection {
-      db.prepare(
+      run(
         `INSERT INTO connections (id, space_host, user_id, user_name, access_token, refresh_token, expires_at)
          VALUES (?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT (space_host, user_id) DO UPDATE SET
@@ -142,7 +150,6 @@ export function openStore(path: string, encryptionKey: Buffer) {
            refresh_token = excluded.refresh_token,
            expires_at = excluded.expires_at,
            needs_reauth = 0`,
-      ).run(
         randomId(),
         input.spaceHost,
         input.userId,
@@ -151,29 +158,36 @@ export function openStore(path: string, encryptionKey: Buffer) {
         seal(input.refreshToken),
         input.expiresAt,
       );
-      const row = db
-        .prepare("SELECT * FROM connections WHERE space_host = ? AND user_id = ?")
-        .get(input.spaceHost, input.userId) as Row;
+      const row = one(
+        "SELECT * FROM connections WHERE space_host = ? AND user_id = ?",
+        input.spaceHost,
+        input.userId,
+      )!;
       return toConnection(row);
     },
 
     getConnection,
 
     updateTokens(id: string, tokens: Tokens): void {
-      db.prepare(
+      run(
         "UPDATE connections SET access_token = ?, refresh_token = ?, expires_at = ?, needs_reauth = 0 WHERE id = ?",
-      ).run(seal(tokens.accessToken), seal(tokens.refreshToken), tokens.expiresAt, id);
+        seal(tokens.accessToken),
+        seal(tokens.refreshToken),
+        tokens.expiresAt,
+        id,
+      );
     },
 
     markNeedsReauth(id: string): void {
-      db.prepare("UPDATE connections SET needs_reauth = 1 WHERE id = ?").run(id);
+      run("UPDATE connections SET needs_reauth = 1 WHERE id = ?", id);
     },
 
     // Only a hash of the session token is stored.
     createSession(connectionId: string, ttlMs: number): string {
       const token = randomId(32);
-      db.prepare("DELETE FROM sessions WHERE expires_at < ?").run(Date.now());
-      db.prepare("INSERT INTO sessions (token_hash, connection_id, expires_at) VALUES (?, ?, ?)").run(
+      run("DELETE FROM sessions WHERE expires_at < ?", Date.now());
+      run(
+        "INSERT INTO sessions (token_hash, connection_id, expires_at) VALUES (?, ?, ?)",
         sha256(token),
         connectionId,
         Date.now() + ttlMs,
@@ -182,31 +196,31 @@ export function openStore(path: string, encryptionKey: Buffer) {
     },
 
     findSession(token: string): Connection | undefined {
-      const row = db
-        .prepare("SELECT connection_id FROM sessions WHERE token_hash = ? AND expires_at > ?")
-        .get(sha256(token), Date.now()) as Row | undefined;
+      const row = one(
+        "SELECT connection_id FROM sessions WHERE token_hash = ? AND expires_at > ?",
+        sha256(token),
+        Date.now(),
+      );
       return row ? getConnection(String(row.connection_id)) : undefined;
     },
 
     deleteSession(token: string): void {
-      db.prepare("DELETE FROM sessions WHERE token_hash = ?").run(sha256(token));
+      run("DELETE FROM sessions WHERE token_hash = ?", sha256(token));
     },
 
     listForms(connectionId: string): FormRecord[] {
-      const rows = db
-        .prepare("SELECT * FROM forms WHERE connection_id = ? ORDER BY created_at DESC")
-        .all(connectionId) as Row[];
-      return rows.map(toForm);
+      return sql
+        .all("SELECT * FROM forms WHERE connection_id = ? ORDER BY created_at DESC", connectionId)
+        .map(toForm);
     },
 
     getForm,
 
     createForm(input: FormInput): FormRecord {
       const id = randomId();
-      db.prepare(
+      run(
         `INSERT INTO forms (id, connection_id, project_id, project_name, issue_type_id, issue_type_name, title, description, field_ids, enabled, created_at)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      ).run(
         id,
         input.connectionId,
         input.projectId,
@@ -226,9 +240,8 @@ export function openStore(path: string, encryptionKey: Buffer) {
       id: string,
       patch: Pick<FormRecord, "issueTypeName" | "title" | "description" | "fieldIds" | "enabled">,
     ): void {
-      db.prepare(
+      run(
         "UPDATE forms SET issue_type_name = ?, title = ?, description = ?, field_ids = ?, enabled = ? WHERE id = ?",
-      ).run(
         patch.issueTypeName,
         patch.title,
         patch.description,
@@ -239,9 +252,9 @@ export function openStore(path: string, encryptionKey: Buffer) {
     },
 
     deleteForm(id: string): void {
-      db.prepare("DELETE FROM forms WHERE id = ?").run(id);
+      run("DELETE FROM forms WHERE id = ?", id);
     },
   };
 }
 
-export type Store = ReturnType<typeof openStore>;
+export type Store = ReturnType<typeof createStore>;
