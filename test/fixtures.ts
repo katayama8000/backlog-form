@@ -21,8 +21,8 @@ export const checkboxField: CustomField = {
 export const fields = [textField, numberField, dateField, checkboxField];
 
 export const schema: FormSchema = {
-  project: { id: 1, projectKey: "TEST", name: "[form] Test", archived: false },
-  issueType: { id: 5, projectId: 1, name: "[form] お問い合わせ" },
+  project: { id: 1, projectKey: "TEST", name: "Test", archived: false },
+  issueType: { id: 5, projectId: 1, name: "お問い合わせ" },
   title: "お問い合わせ",
   fields,
 };

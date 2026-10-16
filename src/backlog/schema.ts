@@ -1,74 +1,67 @@
-import type { BacklogClient } from "./client.ts";
-import { unmark } from "./marker.ts";
+import type { FormRecord, Store } from "../store.ts";
+import type { BacklogGateway } from "./client.ts";
 import type { CustomField, IssueType, Project } from "./types.ts";
 
 export type FormSchema = {
   project: Project;
   issueType: IssueType;
-  // Issue type name without the marker.
   title: string;
-  // Only marked fields, with the marker stripped from their names.
   fields: CustomField[];
 };
+
+// The form exists but can't be shown right now: the owner's access was
+// revoked, or the project or issue type is gone.
+export class FormUnavailableError extends Error {}
+
+// Custom fields of a project that apply to an issue type, in Backlog's order.
+export function applicableFields(fields: CustomField[], issueTypeId: number): CustomField[] {
+  return fields.filter(
+    (f) => f.applicableIssueTypes.length === 0 || f.applicableIssueTypes.includes(issueTypeId),
+  );
+}
 
 const TTL_MS = 5 * 60 * 1000;
 
 // Caches schemas in memory to stay well within Backlog's rate limits.
-// Misses are cached too, so probing random URLs doesn't hit the API each time.
 // Fine for a single process; swap for a shared store if scaled out.
-export function createSchemaLoader(client: BacklogClient) {
-  const cache = new Map<string, { schema: FormSchema | null; expiresAt: number }>();
+export function createSchemaLoader(store: Store, gateway: BacklogGateway) {
+  const cache = new Map<string, { schema: FormSchema; expiresAt: number }>();
 
-  async function fetchSchema(
-    projectKey: string,
-    issueTypeId: number,
-  ): Promise<FormSchema | null> {
-    // Check the project first so unmarked projects cost a single request.
-    const project = await client.findProject(projectKey);
-    if (!project || project.archived || unmark(project.name) === undefined) {
-      return null;
+  async function fetchSchema(form: FormRecord): Promise<FormSchema> {
+    const connection = store.getConnection(form.connectionId);
+    if (!connection) throw new FormUnavailableError(`Connection of form ${form.id} is gone`);
+    const client = gateway.forConnection(connection);
+
+    const project = await client.findProject(form.projectId);
+    if (!project || project.archived) {
+      throw new FormUnavailableError(`Project ${form.projectId} of form ${form.id} is unavailable`);
     }
     const [issueTypes, customFields] = await Promise.all([
-      client.getIssueTypes(projectKey),
-      client.getCustomFields(projectKey),
+      client.getIssueTypes(form.projectId),
+      client.getCustomFields(form.projectId),
     ]);
-    const issueType = issueTypes.find((t) => t.id === issueTypeId);
-    const title = issueType && unmark(issueType.name);
-    if (!issueType || title === undefined) return null;
-
-    const fields: CustomField[] = [];
-    for (const field of customFields) {
-      const applies =
-        field.applicableIssueTypes.length === 0 ||
-        field.applicableIssueTypes.includes(issueType.id);
-      if (!applies) continue;
-      const name = unmark(field.name);
-      if (name !== undefined) {
-        fields.push({ ...field, name });
-      } else if (field.required) {
-        // Backlog would reject every submission, so fail loudly instead.
-        throw new Error(
-          `Required custom field "${field.name}" on ${projectKey}/${issueType.name} is not marked with [form]`,
-        );
-      }
+    const issueType = issueTypes.find((t) => t.id === form.issueTypeId);
+    if (!issueType) {
+      throw new FormUnavailableError(`Issue type ${form.issueTypeId} of form ${form.id} is gone`);
     }
-    return { project, issueType, title, fields };
+    // Required fields are always shown: Backlog rejects issues without them.
+    const selected = new Set(form.fieldIds);
+    const fields = applicableFields(customFields, issueType.id).filter(
+      (f) => f.required || selected.has(f.id),
+    );
+    return { project, issueType, title: form.title, fields };
   }
 
   return {
-    async load(
-      projectKey: string,
-      issueTypeId: number,
-      { fresh = false }: { fresh?: boolean } = {},
-    ): Promise<FormSchema | null> {
-      const key = `${projectKey}/${issueTypeId}`;
-      const cached = cache.get(key);
-      if (!fresh && cached && cached.expiresAt > Date.now()) {
-        return cached.schema;
-      }
-      const schema = await fetchSchema(projectKey, issueTypeId);
-      cache.set(key, { schema, expiresAt: Date.now() + TTL_MS });
+    async load(form: FormRecord, { fresh = false }: { fresh?: boolean } = {}): Promise<FormSchema> {
+      const cached = cache.get(form.id);
+      if (!fresh && cached && cached.expiresAt > Date.now()) return cached.schema;
+      const schema = await fetchSchema(form);
+      cache.set(form.id, { schema, expiresAt: Date.now() + TTL_MS });
       return schema;
+    },
+    invalidate(formId: string): void {
+      cache.delete(formId);
     },
   };
 }

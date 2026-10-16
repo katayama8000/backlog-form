@@ -1,38 +1,35 @@
 # backlog-form
 
-A web form that lets people without a Backlog account (customers, partners, etc.) submit issues to Backlog.
+A web form service that lets people without a Backlog account (customers, partners, etc.) submit issues to Backlog.
 
-Form fields are **generated from Backlog custom fields**. Add or change a custom field in Backlog's project settings and the form follows.
+Backlog users sign in with their Backlog account, pick a project and issue type, choose which custom fields to show, and get a public form URL. Submissions become issues, with each answer stored in its custom field. Form fields are **generated from Backlog custom fields**, so changing a field in Backlog updates the form.
 
 See [DESIGN.md](./DESIGN.md) (Japanese) for design details.
 
-## Requirements
+## For form creators
+
+1. Open the app and sign in with your Backlog space (e.g. `example.backlog.com`), then allow access on Backlog's consent screen.
+2. Choose **新しいフォームを作る**, then a project and an issue type.
+3. Set a title, check the custom fields to show, and save. The form page shows the public URL (`/f/{id}`) to hand out.
+
+Tips:
+
+- **Use an issue type dedicated to external submissions** (e.g. "External inquiry") so they stay separate from internal issues.
+- **Required custom fields are always shown**, because Backlog rejects issues without them.
+- **Field names and descriptions are shown publicly.** Don't select fields with internal-only wording.
+- **Field definitions live in Backlog.** Add fields or change choices in the project settings; the form picks up changes within about five minutes.
+- **Issues are created as the user who made the form.** If you don't want your name on them, sign in with a dedicated account.
+- **Revoking access breaks your forms.** If you revoke this app's access in Backlog, your forms stop working until you sign in again.
+
+## For operators
+
+### Requirements
 
 - Node.js 26+
 - pnpm
-- A Backlog API key, ideally for a bot user that will be shown as the issue creator
+- An OAuth application registered on [Backlog's developer site](https://backlog.com/developer/applications/), with the redirect URI `{APP_URL}/oauth/callback`
 
-## Setup
-
-### 1. Prepare Backlog
-
-All configuration lives in Backlog. A name starting with `[form]` marks what the app may expose; the marker is stripped before display.
-
-| What | Mark it | Effect |
-|---|---|---|
-| Project | `[form] Customer support` | The app only looks at marked, non-archived projects |
-| Issue type | `[form] お問い合わせ` | Each marked issue type is one form; the rest of the name becomes its title |
-| Custom field | `[form] 会社名` | Only marked fields applied to the issue type appear on the form |
-
-1. Create a project whose name starts with `[form]`, and add the API key's user to it.
-2. Create an issue type whose name starts with `[form]`.
-3. Create the custom fields you want on the form, prefix their names with `[form]`, and apply them to that issue type.
-
-The form is served at `/f/{projectKey}/{issueTypeId}`, e.g. `/f/SUPPORT/12345`.
-
-Names and descriptions of marked fields are shown publicly. Unmarked fields stay internal, but a **required** custom field must be marked: Backlog would reject every submission otherwise, so the form fails to load instead.
-
-### 2. Environment variables
+### Environment variables
 
 Copy the template and fill in the values:
 
@@ -42,21 +39,27 @@ cp .env.example .env
 
 | Variable | Required | Description |
 |---|---|---|
-| `BACKLOG_SPACE_URL` | yes | e.g. `https://example.backlog.com` |
-| `BACKLOG_API_KEY` | yes | API key of the user shown as the issue creator |
+| `APP_URL` | yes | Public URL of this app, e.g. `https://forms.example.com` |
+| `APP_SECRET` | yes | 32+ random characters (`openssl rand -base64 32`). Encrypts stored tokens and signs cookies |
+| `BACKLOG_CLIENT_ID` / `BACKLOG_CLIENT_SECRET` | yes | From the registered OAuth application |
+| `DATABASE_PATH` | no | SQLite file. Defaults to `data/backlog-form.db` |
 | `TURNSTILE_SITE_KEY` / `TURNSTILE_SECRET_KEY` | no | Cloudflare Turnstile is enabled only when both are set |
 | `PORT` | no | Defaults to `3000` |
 
-### 3. Run
+Keep `APP_SECRET` stable. Changing it signs everyone out and makes the stored tokens unreadable, so every form stops working until its creator signs in again.
+
+The database holds each creator's OAuth tokens (encrypted) and form settings. Put it on persistent storage and back it up.
+
+### Run
 
 ```sh
 pnpm install
 pnpm dev
 ```
 
-Open `http://localhost:3000/f/{projectKey}/{issueTypeId}`.
+Open `http://localhost:3000`.
 
-## Scripts
+### Scripts
 
 | Command | Description |
 |---|---|

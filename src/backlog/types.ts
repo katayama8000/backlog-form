@@ -72,3 +72,5 @@ export function isMultiValue(field: CustomField): boolean {
 }
 
 export type CreatedIssue = { id: number; issueKey: string };
+
+export type User = { id: number; userId: string; name: string };
