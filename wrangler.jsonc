@@ -12,8 +12,9 @@
   },
   "migrations": [{ "tag": "v1", "new_sqlite_classes": ["BackendObject"] }],
   "vars": {
-    // Set to the deployed URL, e.g. https://backlog-form.<subdomain>.workers.dev
-    "APP_URL": "http://localhost:8787"
+    // The deployed URL. `pnpm cf:dev` serves http://localhost:8787 instead;
+    // override APP_URL in .dev.vars to sign in there.
+    "APP_URL": "https://backlog-form.tattu-0310.workers.dev"
   }
   // Secrets, set with `wrangler secret put`: APP_SECRET, BACKLOG_CLIENT_ID,
   // BACKLOG_CLIENT_SECRET, and optionally TURNSTILE_SITE_KEY, TURNSTILE_SECRET_KEY.

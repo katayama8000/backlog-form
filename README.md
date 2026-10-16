@@ -64,7 +64,7 @@ pnpm dev
 
 Open `http://localhost:3000`.
 
-To run the Worker itself locally, put the same variables (except `APP_URL`, `DATABASE_PATH` and `PORT`) in `.dev.vars` and run `pnpm cf:dev`. It serves `http://localhost:8787`, so register `http://localhost:8787/oauth/callback` as a redirect URI if you want to sign in there.
+To run the Worker itself locally, put the same variables (except `DATABASE_PATH` and `PORT`) in `.dev.vars` and run `pnpm cf:dev`. It serves `http://localhost:8787`; set `APP_URL=http://localhost:8787` there, and register `http://localhost:8787/oauth/callback` as a redirect URI if you want to sign in.
 
 ### Deploy to Cloudflare
 
