@@ -34,7 +34,7 @@ Web フォームから Backlog に課題を登録できるようにする。
 
 | 役割 | 採用 | メモ |
 |---|---|---|
-| ランタイム | Node.js 26 | 型を除去して `.ts` を直接実行するため、ビルド手順はない |
+| ランタイム | Node.js 24 | 型を除去して `.ts` を直接実行するため、ビルド手順はない |
 | 型チェック | TypeScript 7 | `tsc` は型チェック専用（`noEmit`）。`erasableSyntaxOnly` で enum などは使わない |
 | Web | Hono + @hono/node-server | |
 | HTML | `hono/html` のタグ付きテンプレート | JSX は Node の型除去では動かないため不採用。埋め込んだ値は自動でエスケープされる |

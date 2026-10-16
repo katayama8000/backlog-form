@@ -27,7 +27,7 @@ Tips:
 
 ### Requirements
 
-- Node.js 26+
+- Node.js 24+
 - pnpm
 - An OAuth application registered on [Backlog's developer site](https://backlog.com/developer/applications/), with the redirect URI `{APP_URL}/oauth/callback`
 

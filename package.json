@@ -14,12 +14,12 @@
     "hono": "^4.13.13"
   },
   "devDependencies": {
-    "@types/node": "^26.6.5",
+    "@types/node": "^24.19.2",
     "typescript": "^7.0.2"
   },
   "private": true,
   "engines": {
-    "node": ">=26"
+    "node": ">=24"
   },
   "packageManager": "pnpm@11.25.0"
 }
