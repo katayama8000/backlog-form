@@ -1,3 +1,5 @@
 allowBuilds:
   esbuild: true
   workerd: true
+minimumReleaseAgeExclude:
+  - backlog-js@1.0.1

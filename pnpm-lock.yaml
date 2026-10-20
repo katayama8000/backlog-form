@@ -12,8 +12,8 @@ importers:
         specifier: ^2.1.5
         version: 2.1.5(hono@4.13.13)
       backlog-js:
-        specifier: ^1.0.0
-        version: 1.0.0
+        specifier: ^1.0.1
+        version: 1.0.1
       hono:
         specifier: ^4.13.13
         version: 4.13.13
@@ -553,8 +553,8 @@ packages:
     cpu: [x64]
     os: [win32]
 
-  backlog-js@1.0.0:
-    resolution: {integrity: sha512-qCxMPLRnx6iqWa4AQb0AezeMvtTRIep9XnTyIqZOr6Hi9rxJH1hvzptZVkJainGEdK0qM+C4O5hlVRFIyqwoiQ==}
+  backlog-js@1.0.1:
+    resolution: {integrity: sha512-pdV7NSzXzfDKhaaHhwG+uXGexTkOUVAnDpHjSaRO6Jcl3FnkORUVmPSivFpr1maWeswUHvSvrD6/xH1RcjnXtg==}
 
   blake3-wasm@2.1.5:
     resolution: {integrity: sha512-F1+K8EbfOZE49dtoPtmxUQrpXaBIl3ICvasLh+nJta0xkz+9kF/7uet9fLnwKqhDrmj6g+6K3Tw9yQPUg2ka5g==}
@@ -1053,7 +1053,7 @@ snapshots:
   '@typescript/typescript-win32-x64@7.0.2':
     optional: true
 
-  backlog-js@1.0.0:
+  backlog-js@1.0.1:
     dependencies:
       qs: 6.16.1
 
