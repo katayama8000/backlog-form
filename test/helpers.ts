@@ -12,6 +12,7 @@ const HOUR = 60 * 60 * 1000;
 export function setup() {
   const store = openStore(":memory:", deriveKey("x".repeat(32), "test"));
   const issues: IssueParams[] = [];
+  const uploads: File[] = [];
   const client: BacklogClient = {
     getMyself: async () => ({ id: 1, userId: "alice", name: "Alice" }),
     getProjects: async () => [schema.project],
@@ -29,6 +30,10 @@ export function setup() {
       { id: 3, name: "中" },
       { id: 4, name: "低" },
     ],
+    uploadAttachment: async (file) => {
+      uploads.push(file);
+      return { id: 500 + uploads.length };
+    },
     addIssue: async (params) => {
       issues.push(params);
       return { id: 1, issueKey: "TEST-1" };
@@ -50,7 +55,7 @@ export function setup() {
     refreshToken: "refresh",
     expiresAt: Date.now() + HOUR,
   });
-  return { store, client, issues, app, connection };
+  return { store, client, issues, uploads, app, connection };
 }
 
 // A same-origin form POST, as a browser would send it.
@@ -65,4 +70,12 @@ export function post(path: string, body: Record<string, string | string[]>, cook
   };
   if (cookie) headers.cookie = cookie;
   return new Request(`${APP_URL}${path}`, { method: "POST", body: data, headers });
+}
+
+// A same-origin multipart POST with files, as a form with a file input sends it.
+export function postFiles(path: string, body: Record<string, string>, files: Record<string, File[]>) {
+  const data = new FormData();
+  for (const [key, value] of Object.entries(body)) data.append(key, value);
+  for (const [key, list] of Object.entries(files)) for (const file of list) data.append(key, file);
+  return new Request(`${APP_URL}${path}`, { method: "POST", body: data, headers: { origin: APP_URL } });
 }

@@ -6,6 +6,7 @@ export const names = {
   summary: "summary",
   description: "description",
   honeypot: "website",
+  attachments: "attachments",
   field: (field: CustomField) => `cf_${field.id}`,
   other: (field: CustomField) => `cf_${field.id}_other`,
 };
@@ -32,6 +33,11 @@ export function readInput(form: Pick<FormData, "get" | "getAll">, fields: Custom
     input[names.other(field)] = str(names.other(field));
   }
   return input;
+}
+
+// Files chosen in the attachments input. Browsers send an empty file when none is chosen.
+export function readFiles(form: Pick<FormData, "getAll">): File[] {
+  return form.getAll(names.attachments).filter((v): v is File => v instanceof File && v.size > 0);
 }
 
 const SENT_AT = {

@@ -90,6 +90,7 @@ function readEditor(data: FormData, applicable: { id: number }[], choices: Issue
       milestoneIds: pick(data.getAll("milestoneIds"), choices.milestones),
     },
     lang: toLang(data.get("lang")),
+    allowAttachments: data.get("allowAttachments") === "1",
     enabled: data.get("enabled") === "1",
   };
   const errors: Record<string, string> = {};
@@ -232,6 +233,7 @@ export function adminRoutes(deps: AdminDeps) {
           autoSummary: false,
           issueDefaults: NO_DEFAULTS,
           lang: "ja",
+          allowAttachments: false,
           enabled: true,
         },
       }),
