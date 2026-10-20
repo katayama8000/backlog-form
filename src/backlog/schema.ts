@@ -1,4 +1,5 @@
 import type { Backend } from "../backend.ts";
+import type { Lang } from "../form/messages.ts";
 import type { FormRecord, IssueDefaults } from "../store.ts";
 import type { BacklogGateway } from "./client.ts";
 import type { CustomField, IssueType, Project } from "./types.ts";
@@ -10,6 +11,7 @@ export type FormSchema = {
   description: string;
   autoSummary: boolean;
   issueDefaults: IssueDefaults;
+  lang: Lang;
   fields: CustomField[];
 };
 
@@ -62,13 +64,14 @@ export function createSchemaLoader(store: Backend, gateway: BacklogGateway) {
       description: form.description,
       autoSummary: form.autoSummary,
       issueDefaults: form.issueDefaults,
+      lang: form.lang,
       fields,
     };
   }
 
   return {
     async load(form: FormRecord, { fresh = false }: { fresh?: boolean } = {}): Promise<FormSchema> {
-      const settings = JSON.stringify([form.title, form.description, form.fieldIds, form.autoSummary, form.issueDefaults]);
+      const settings = JSON.stringify([form.title, form.description, form.fieldIds, form.autoSummary, form.issueDefaults, form.lang]);
       const cached = cache.get(form.id);
       if (!fresh && cached && cached.settings === settings && cached.expiresAt > Date.now()) {
         return cached.schema;

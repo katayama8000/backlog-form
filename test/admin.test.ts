@@ -75,6 +75,7 @@ test("creates a form through the wizard", async () => {
   assert.deepEqual(form.fieldIds, [12]); // unknown ids are dropped
   assert.equal(form.enabled, true);
   assert.equal(form.autoSummary, false);
+  assert.equal(form.lang, "ja");
 
   const page = await (await get(`/forms/${form.id}`)).text();
   assert.match(page, new RegExp(`http://localhost/f/${form.id}`));
@@ -119,6 +120,7 @@ test("updates and deletes a form", async () => {
         priorityId: "4",
         categoryIds: ["31", "999"],
         milestoneIds: ["41"],
+        lang: "en",
       },
       session,
     ),
@@ -127,6 +129,7 @@ test("updates and deletes a form", async () => {
   assert.equal(updated.title, "新タイトル");
   assert.deepEqual(updated.fieldIds, [11]);
   assert.equal(updated.autoSummary, true);
+  assert.equal(updated.lang, "en");
   // Unknown and archived ids are dropped.
   assert.deepEqual(updated.issueDefaults, { assigneeId: 2, priorityId: 4, categoryIds: [31], milestoneIds: [] });
   assert.equal(updated.enabled, false); // unchecked box
@@ -218,7 +221,7 @@ test("lists forms with their issue type and a copy button", async () => {
   // The preview works even while the form is unpublished, but can't be submitted.
   const preview = await ctx.app.request(`/forms/${form.id}/preview`, { headers: { cookie: session } });
   assert.equal(preview.status, 200);
-  assert.match(await preview.text(), /<button type="submit" disabled>/);
+  assert.match(await preview.text(), /<button type="submit"[^>]* disabled>/);
 
   ctx.store.updateForm(form.id, { ...form, enabled: true });
   const published = await (await ctx.app.request("/forms", { headers: { cookie: session } })).text();

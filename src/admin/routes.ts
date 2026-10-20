@@ -5,6 +5,7 @@ import type { BacklogClient, BacklogGateway, OAuthProvider } from "../backlog/cl
 import { parseSpaceHost } from "../backlog/oauth.ts";
 import { applicableFields, FormUnavailableError, type SchemaLoader } from "../backlog/schema.ts";
 import { randomId } from "../crypto.ts";
+import { toLang } from "../form/messages.ts";
 import { renderForm } from "../form/render.ts";
 import type { Backend } from "../backend.ts";
 import { type Connection, NO_DEFAULTS } from "../store.ts";
@@ -88,6 +89,7 @@ function readEditor(data: FormData, applicable: { id: number }[], choices: Issue
       categoryIds: pick(data.getAll("categoryIds"), choices.categories),
       milestoneIds: pick(data.getAll("milestoneIds"), choices.milestones),
     },
+    lang: toLang(data.get("lang")),
     enabled: data.get("enabled") === "1",
   };
   const errors: Record<string, string> = {};
@@ -229,6 +231,7 @@ export function adminRoutes(deps: AdminDeps) {
           fieldIds: [],
           autoSummary: false,
           issueDefaults: NO_DEFAULTS,
+          lang: "ja",
           enabled: true,
         },
       }),

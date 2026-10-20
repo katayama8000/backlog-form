@@ -223,7 +223,7 @@ document.addEventListener("submit", (event) => {
   if (form.dataset.sent) return event.preventDefault();
   form.dataset.sent = "1";
   const button = form.querySelector("button[type=submit]");
-  if (button) { button.disabled = true; button.dataset.label = button.textContent; button.textContent = "送信中…"; }
+  if (button) { button.disabled = true; button.dataset.label = button.textContent; button.textContent = button.dataset.busy || "送信中…"; }
 });
 // Pages restored from the back/forward cache keep the disabled state.
 window.addEventListener("pageshow", () => {
@@ -248,9 +248,9 @@ document.addEventListener("click", async (event) => {
 `);
 
 // `html` escapes every interpolated value, so Backlog-provided labels are safe.
-export function layout(title: string, body: Html, head: Html = html``): Html {
+export function layout(title: string, body: Html, head: Html = html``, lang = "ja"): Html {
   return html`<!doctype html>
-<html lang="ja">
+<html lang="${lang}">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
