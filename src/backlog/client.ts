@@ -10,6 +10,7 @@ import {
   getProjects,
   getProjectUsers,
   getVersions,
+  postSpaceAttachment,
   type Option,
   postIssue,
 } from "backlog-js";
@@ -32,6 +33,8 @@ export type BacklogClient = {
   getCategories(projectId: number): Promise<Category[]>;
   getMilestones(projectId: number): Promise<Milestone[]>;
   getPriorities(): Promise<Priority[]>;
+  // Uploads a file to attach to an issue created after it.
+  uploadAttachment(file: File): Promise<{ id: number }>;
   addIssue(params: IssueParams): Promise<CreatedIssue>;
 };
 
@@ -79,6 +82,11 @@ function clientFor(spaceHost: string, accessToken: string): BacklogClient {
     getCategories: (projectId) => getCategories(client, projectId),
     getMilestones: (projectId) => getVersions(client, projectId),
     getPriorities: () => getPriorities(client),
+    uploadAttachment: (file) => {
+      const body = new FormData();
+      body.append("file", file, file.name);
+      return postSpaceAttachment(client, body);
+    },
     addIssue: (params) => postIssue(client, params),
   };
 }
@@ -122,6 +130,7 @@ export function createBacklogGateway(backend: Pick<Backend, "refreshAccessToken"
         getCategories: (id) => call((c) => c.getCategories(id)),
         getMilestones: (id) => call((c) => c.getMilestones(id)),
         getPriorities: () => call((c) => c.getPriorities()),
+        uploadAttachment: (file) => call((c) => c.uploadAttachment(file)),
         addIssue: (params) => call((c) => c.addIssue(params)),
       };
     },

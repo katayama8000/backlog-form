@@ -5,9 +5,9 @@ import { ReauthRequiredError } from "../src/backlog/client.ts";
 import type { CustomField } from "../src/backlog/types.ts";
 import type { FormInput } from "../src/store.ts";
 import { schema } from "./fixtures.ts";
-import { post, setup } from "./helpers.ts";
+import { post, postFiles, setup } from "./helpers.ts";
 
-function withForm(overrides: Partial<Pick<FormInput, "fieldIds" | "enabled" | "autoSummary" | "issueDefaults" | "lang">> = {}) {
+function withForm(overrides: Partial<Pick<FormInput, "fieldIds" | "enabled" | "autoSummary" | "issueDefaults" | "lang" | "allowAttachments">> = {}) {
   const ctx = setup();
   const form = ctx.store.createForm({
     connectionId: ctx.connection.id,
@@ -137,6 +137,42 @@ test("shows English forms in English", async () => {
   const done = await (await app.fetch(post(url, { cf_10: "Nulab" }))).text();
   assert.match(done, /Submitted/);
   assert.match(String(issues[0]?.summary), /^お問い合わせ \([A-Z][a-z]{2} \d{1,2}, \d{4}, \d{1,2}:\d{2} [AP]M JST\)$/);
+});
+
+test("attaches uploaded files to the issue", async () => {
+  const { app, issues, uploads, url } = withForm({ allowAttachments: true });
+  const body = await (await app.request(url)).text();
+  assert.match(body, /enctype="multipart\/form-data"/);
+  assert.match(body, /type="file" id="attachments" name="attachments" multiple/);
+
+  const files = [new File(["a"], "a.png"), new File(["b"], "b.pdf")];
+  const res = await app.fetch(postFiles(url, { summary: "件名", cf_10: "Nulab" }, { attachments: files }));
+  assert.equal(res.status, 200);
+  assert.deepEqual(uploads.map((f) => f.name), ["a.png", "b.pdf"]);
+  assert.deepEqual(issues[0]?.attachmentId, [501, 502]);
+});
+
+test("rejects too many or too large files without uploading them", async () => {
+  const { app, issues, uploads, url } = withForm({ allowAttachments: true });
+  const many = Array.from({ length: 6 }, (_, i) => new File(["x"], `${i}.txt`));
+  const tooMany = await app.fetch(postFiles(url, { summary: "件名", cf_10: "Nulab" }, { attachments: many }));
+  assert.equal(tooMany.status, 400);
+  assert.match(await tooMany.text(), /ファイルは 5 個までです/);
+
+  const large = new File([new Uint8Array(10 * 1024 * 1024 + 1)], "large.zip");
+  const tooLarge = await app.fetch(postFiles(url, { summary: "件名", cf_10: "Nulab" }, { attachments: [large] }));
+  assert.equal(tooLarge.status, 400);
+  assert.match(await tooLarge.text(), /large\.zip が 10 MB を超えています/);
+  assert.equal(uploads.length, 0);
+  assert.equal(issues.length, 0);
+});
+
+test("ignores files when the form doesn't take attachments", async () => {
+  const { app, issues, uploads, url } = withForm();
+  assert.doesNotMatch(await (await app.request(url)).text(), /type="file"/);
+  await app.fetch(postFiles(url, { summary: "件名", cf_10: "Nulab" }, { attachments: [new File(["a"], "a.png")] }));
+  assert.equal(uploads.length, 0);
+  assert.equal(issues[0]?.attachmentId, undefined);
 });
 
 test("returns 400 and keeps input on validation errors", async () => {

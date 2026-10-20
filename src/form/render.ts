@@ -9,6 +9,7 @@ import {
 import { type Html, layout } from "../layout.ts";
 import { names, type RawInput } from "./input.ts";
 import { type Lang, MESSAGES, type Messages } from "./messages.ts";
+import { MAX_FILE_MB, MAX_FILES } from "./validate.ts";
 
 export type FormView = {
   schema: FormSchema;
@@ -143,7 +144,7 @@ export function renderForm(view: FormView): Html {
     ${schema.description ? html`<p class="form-description">${schema.description}</p>` : ""}
     <p class="lead">${t.requiredLead[0]}<span class="req">${t.required}</span>${t.requiredLead[1]}</p>
     ${formError}
-    <form method="post" data-once ${view.preview ? html`onsubmit="return false"` : ""}>
+    <form method="post" ${schema.allowAttachments ? html`enctype="multipart/form-data"` : ""} data-once ${view.preview ? html`onsubmit="return false"` : ""}>
       ${schema.autoSummary
         ? ""
         : html`<div class="field">
@@ -156,6 +157,14 @@ export function renderForm(view: FormView): Html {
         <label class="label" for="${names.description}">${t.description}</label>
         <textarea id="${names.description}" name="${names.description}" rows="8">${single(input, names.description)}</textarea>
       </div>
+      ${schema.allowAttachments
+        ? html`<div class="field">
+            <label class="label" for="${names.attachments}">${t.attachments}</label>
+            ${hintText(t.attachmentsHint(MAX_FILES, MAX_FILE_MB))}
+            <input type="file" id="${names.attachments}" name="${names.attachments}" multiple ${invalid(errors?.[names.attachments])} />
+            ${errorText(errors?.[names.attachments])}
+          </div>`
+        : ""}
       <input class="hp" name="${names.honeypot}" tabindex="-1" autocomplete="off" aria-hidden="true" />
       <hr class="divider" />
       ${turnstileWidget}

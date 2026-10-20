@@ -29,5 +29,6 @@ export const schema: FormSchema = {
   autoSummary: false,
   issueDefaults: NO_DEFAULTS,
   lang: "ja",
+  allowAttachments: false,
   fields,
 };

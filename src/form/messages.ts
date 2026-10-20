@@ -15,6 +15,9 @@ const ja = {
   requiredLead: ["", " の項目は入力が必要です。"],
   summary: "件名",
   description: "詳細",
+  attachments: "添付ファイル",
+  attachmentsHint: (files: number, mb: number) =>
+    `${files} 個まで、1 個 ${mb} MB まで。入力内容にエラーがあったときは、選び直してください`,
   select: "選択してください",
   other: "その他（自由入力）",
   otherLabel: (name: string) => `${name}（その他）`,
@@ -39,6 +42,8 @@ const ja = {
     date: "日付を入力してください",
     minDate: (min: string) => `${min} 以降の日付を入力してください`,
     maxDate: (max: string) => `${max} 以前の日付を入力してください`,
+    tooManyFiles: (max: number) => `ファイルは ${max} 個までです`,
+    fileTooLarge: (name: string, mb: number) => `${name} が ${mb} MB を超えています`,
   },
 };
 
@@ -49,6 +54,9 @@ const en: Messages = {
   requiredLead: ["Fields marked ", " must be filled in."],
   summary: "Subject",
   description: "Details",
+  attachments: "Attachments",
+  attachmentsHint: (files, mb) =>
+    `Up to ${files} files, ${mb} MB each. If there are errors in your entries, choose the files again`,
   select: "Select one",
   other: "Other (free text)",
   otherLabel: (name) => `${name} (other)`,
@@ -73,6 +81,8 @@ const en: Messages = {
     date: "Please enter a date",
     minDate: (min) => `Please enter ${min} or later`,
     maxDate: (max) => `Please enter ${max} or earlier`,
+    tooManyFiles: (max) => `Please attach up to ${max} files`,
+    fileTooLarge: (name, mb) => `${name} is larger than ${mb} MB`,
   },
 };
 

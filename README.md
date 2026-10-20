@@ -19,6 +19,7 @@ Tips:
 - **Required custom fields are always shown**, because Backlog rejects issues without them.
 - **Field names and descriptions are shown to anyone who opens the form.** Don't select fields you don't want them to see.
 - **Field definitions live in Backlog.** Add fields or change choices under Project settings > Custom fields (linked from the form page); the form picks up changes within about five minutes.
+- **Accept attachments** with ファイルの添付を受け付ける. Submitters can attach up to 5 files of 10 MB each, and they are attached to the issue. Anyone with the URL can send files, so be careful when opening them.
 - **Show the form in English** with フォームの言語. It changes the buttons, hints and error messages; the title, description, field names and choices are shown as you wrote them, so write those in English too.
 - **Set an assignee** under 課題の初期値 so someone is notified of each submission. Priority, categories and milestones can be preset there too. If Backlog rejects a default (e.g. the assignee left the project), the issue is created without the defaults rather than failing.
 - **Let the app write the summary** with 件名を自動で付ける. The form then has no summary field, and issues are titled "{form title}（{date and time sent, JST}）". Useful when submitters wouldn't know what to write.

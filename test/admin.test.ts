@@ -76,6 +76,7 @@ test("creates a form through the wizard", async () => {
   assert.equal(form.enabled, true);
   assert.equal(form.autoSummary, false);
   assert.equal(form.lang, "ja");
+  assert.equal(form.allowAttachments, false);
 
   const page = await (await get(`/forms/${form.id}`)).text();
   assert.match(page, new RegExp(`http://localhost/f/${form.id}`));
@@ -121,6 +122,7 @@ test("updates and deletes a form", async () => {
         categoryIds: ["31", "999"],
         milestoneIds: ["41"],
         lang: "en",
+        allowAttachments: "1",
       },
       session,
     ),
@@ -130,6 +132,7 @@ test("updates and deletes a form", async () => {
   assert.deepEqual(updated.fieldIds, [11]);
   assert.equal(updated.autoSummary, true);
   assert.equal(updated.lang, "en");
+  assert.equal(updated.allowAttachments, true);
   // Unknown and archived ids are dropped.
   assert.deepEqual(updated.issueDefaults, { assigneeId: 2, priorityId: 4, categoryIds: [31], milestoneIds: [] });
   assert.equal(updated.enabled, false); // unchecked box
