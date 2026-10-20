@@ -74,3 +74,13 @@ export function isMultiValue(field: CustomField): boolean {
 export type CreatedIssue = { id: number; issueKey: string };
 
 export type User = { id: number; userId: string; name: string };
+
+export type Category = { id: number; name: string };
+
+// A Backlog "version", shown as a milestone in the UI.
+export type Milestone = { id: number; name: string; archived: boolean };
+
+export type Priority = { id: number; name: string };
+
+// Backlog's "Normal", used when a form doesn't set a priority.
+export const PRIORITY_NORMAL = 3;

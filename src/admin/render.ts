@@ -1,7 +1,16 @@
 import { html } from "hono/html";
-import type { CustomField, IssueType, Project } from "../backlog/types.ts";
+import {
+  type Category,
+  type CustomField,
+  type IssueType,
+  type Milestone,
+  type Priority,
+  PRIORITY_NORMAL,
+  type Project,
+  type User,
+} from "../backlog/types.ts";
 import { type Html, layout } from "../layout.ts";
-import type { Connection, FormRecord } from "../store.ts";
+import type { Connection, FormRecord, IssueDefaults } from "../store.ts";
 
 const APP_NAME = "Backlog Form";
 
@@ -145,13 +154,29 @@ export function renderPickIssueType(
   );
 }
 
+// What a form's issue defaults can be set to, from the project.
+export type IssueChoices = {
+  users: User[];
+  categories: Category[];
+  milestones: Milestone[];
+  priorities: Priority[];
+};
+
 export type EditorView = {
   connection: Connection;
   project: Project;
   issueType: IssueType;
   // Custom fields applicable to the issue type.
   fields: CustomField[];
-  values: { title: string; description: string; fieldIds: number[]; autoSummary: boolean; enabled: boolean };
+  choices: IssueChoices;
+  values: {
+    title: string;
+    description: string;
+    fieldIds: number[];
+    autoSummary: boolean;
+    issueDefaults: IssueDefaults;
+    enabled: boolean;
+  };
   errors?: Record<string, string>;
   // Set when editing an existing form.
   form?: { id: string; url: string };
@@ -173,6 +198,37 @@ function fieldChoices(view: EditorView) {
       <span class="meta">${FIELD_TYPES[field.typeId] ?? ""}</span>
     </label>`;
   })}</div>`;
+}
+
+function defaultChoices(view: EditorView) {
+  const { choices } = view;
+  const { assigneeId, priorityId, categoryIds, milestoneIds } = view.values.issueDefaults;
+  const option = (id: number, name: string, selected: boolean) =>
+    html`<option value="${id}" ${selected ? "selected" : ""}>${name}</option>`;
+  const checkboxes = (name: string, items: { id: number; name: string }[], selected: number[]) =>
+    html`<div class="choice-list">${items.map(
+      (item) => html`<label class="choice"><input type="checkbox" name="${name}" value="${item.id}" ${selected.includes(item.id) ? "checked" : ""} />${item.name}</label>`,
+    )}</div>`;
+  return html`<div class="field">
+      <label class="label" for="assigneeId">担当者</label>
+      <span class="hint">担当者を決めておくと、送信されたときにその人に通知が届きます</span>
+      <select id="assigneeId" name="assigneeId">
+        <option value="">なし</option>
+        ${choices.users.map((u) => option(u.id, u.name, u.id === assigneeId))}
+      </select>
+    </div>
+    <div class="field">
+      <label class="label" for="priorityId">優先度</label>
+      <select id="priorityId" name="priorityId">
+        ${choices.priorities.map((p) => option(p.id, p.name, p.id === (priorityId ?? PRIORITY_NORMAL)))}
+      </select>
+    </div>
+    ${choices.categories.length
+      ? html`<div class="field"><span class="label">カテゴリー</span>${checkboxes("categoryIds", choices.categories, categoryIds)}</div>`
+      : ""}
+    ${choices.milestones.length
+      ? html`<div class="field"><span class="label">マイルストーン</span>${checkboxes("milestoneIds", choices.milestones, milestoneIds)}</div>`
+      : ""}`;
 }
 
 export function renderEditor(view: EditorView): Html {
@@ -222,6 +278,11 @@ export function renderEditor(view: EditorView): Html {
           ${fieldChoices(view)}
         </fieldset>
         <p class="notice">カスタム属性の追加や選択肢の変更は、Backlog の${backlogLink(view.connection, "ListAttribute", project.id, "プロジェクト設定の「カスタム属性」")}で行います。追加したら、この画面を再読み込みしてください。</p>
+        <fieldset class="field">
+          <legend>課題の初期値</legend>
+          <span class="hint">フォームから作られる課題に設定されます。送信する人には表示されません</span>
+          ${defaultChoices(view)}
+        </fieldset>
         <fieldset class="field">
           <legend>公開</legend>
           <label class="choice"><input type="checkbox" name="enabled" value="1" ${values.enabled ? "checked" : ""} />フォームを公開する</label>

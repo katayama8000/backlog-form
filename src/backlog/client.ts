@@ -1,17 +1,21 @@
 import {
   Error as BacklogErrors,
   createClient,
+  getCategories,
   getCustomFields,
   getIssueTypes,
   getMyself,
+  getPriorities,
   getProject,
   getProjects,
+  getProjectUsers,
+  getVersions,
   type Option,
   postIssue,
 } from "backlog-js";
 import { type Backend, EXPIRY_MARGIN_MS } from "../backend.ts";
 import type { Connection, Tokens } from "../store.ts";
-import type { CreatedIssue, CustomField, IssueType, Project, User } from "./types.ts";
+import type { Category, CreatedIssue, CustomField, IssueType, Milestone, Priority, Project, User } from "./types.ts";
 
 export type IssueParams = Option.Issue.PostIssueParams;
 
@@ -23,6 +27,11 @@ export type BacklogClient = {
   findProject(projectId: number): Promise<Project | null>;
   getIssueTypes(projectId: number): Promise<IssueType[]>;
   getCustomFields(projectId: number): Promise<CustomField[]>;
+  // Choices for a form's issue defaults.
+  getProjectUsers(projectId: number): Promise<User[]>;
+  getCategories(projectId: number): Promise<Category[]>;
+  getMilestones(projectId: number): Promise<Milestone[]>;
+  getPriorities(): Promise<Priority[]>;
   addIssue(params: IssueParams): Promise<CreatedIssue>;
 };
 
@@ -66,6 +75,10 @@ function clientFor(spaceHost: string, accessToken: string): BacklogClient {
     // Narrow the SDK's loose entity type to our discriminated union.
     getCustomFields: async (projectId) =>
       (await getCustomFields(client, projectId)) as unknown as CustomField[],
+    getProjectUsers: (projectId) => getProjectUsers(client, projectId),
+    getCategories: (projectId) => getCategories(client, projectId),
+    getMilestones: (projectId) => getVersions(client, projectId),
+    getPriorities: () => getPriorities(client),
     addIssue: (params) => postIssue(client, params),
   };
 }
@@ -105,6 +118,10 @@ export function createBacklogGateway(backend: Pick<Backend, "refreshAccessToken"
         findProject: (id) => call((c) => c.findProject(id)),
         getIssueTypes: (id) => call((c) => c.getIssueTypes(id)),
         getCustomFields: (id) => call((c) => c.getCustomFields(id)),
+        getProjectUsers: (id) => call((c) => c.getProjectUsers(id)),
+        getCategories: (id) => call((c) => c.getCategories(id)),
+        getMilestones: (id) => call((c) => c.getMilestones(id)),
+        getPriorities: () => call((c) => c.getPriorities()),
         addIssue: (params) => call((c) => c.addIssue(params)),
       };
     },

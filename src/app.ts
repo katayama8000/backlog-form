@@ -1,3 +1,4 @@
+import { Error as BacklogErrors } from "backlog-js";
 import { type Context, Hono } from "hono";
 import { csrf } from "hono/csrf";
 import { HTTPException } from "hono/http-exception";
@@ -10,7 +11,7 @@ import { toIssueParams } from "./form/to-issue.ts";
 import { validate } from "./form/validate.ts";
 import { renderLanding } from "./admin/render.ts";
 import type { Backend } from "./backend.ts";
-import type { FormRecord } from "./store.ts";
+import { type FormRecord, hasDefaults, NO_DEFAULTS } from "./store.ts";
 import { verifyTurnstile } from "./turnstile.ts";
 
 export type AppDeps = {
@@ -95,7 +96,15 @@ export function createApp(deps: AppDeps) {
     try {
       const connection = await store.getConnection(form.connectionId);
       if (!connection) throw new FormUnavailableError(`Connection of form ${form.id} is gone`);
-      await gateway.forConnection(connection).addIssue(toIssueParams(schema, result.submission));
+      const client = gateway.forConnection(connection);
+      try {
+        await client.addIssue(toIssueParams(schema, result.submission));
+      } catch (error) {
+        // E.g. the default assignee left the project. Don't lose the submission over it.
+        if (!(error instanceof BacklogErrors.BacklogApiError) || !hasDefaults(schema.issueDefaults)) throw error;
+        console.warn(`Form ${form.id}: retrying without issue defaults`, error);
+        await client.addIssue(toIssueParams(schema, result.submission, NO_DEFAULTS));
+      }
     } catch (error) {
       console.error("Failed to create issue", error);
       return c.html(

@@ -16,6 +16,26 @@ export type Connection = {
 
 export type Tokens = Pick<Connection, "accessToken" | "refreshToken" | "expiresAt">;
 
+// Set on every issue a form creates. Ids that no longer exist in Backlog
+// make it reject the issue, so submitting falls back to no defaults.
+export type IssueDefaults = {
+  assigneeId: number | null;
+  priorityId: number | null;
+  categoryIds: number[];
+  milestoneIds: number[];
+};
+
+export const NO_DEFAULTS: IssueDefaults = { assigneeId: null, priorityId: null, categoryIds: [], milestoneIds: [] };
+
+export function hasDefaults(defaults: IssueDefaults): boolean {
+  return (
+    defaults.assigneeId !== null ||
+    defaults.priorityId !== null ||
+    defaults.categoryIds.length > 0 ||
+    defaults.milestoneIds.length > 0
+  );
+}
+
 export type FormRecord = {
   id: string;
   connectionId: string;
@@ -31,11 +51,13 @@ export type FormRecord = {
   fieldIds: number[];
   // Issues get a generated summary, and the form doesn't ask for one.
   autoSummary: boolean;
+  issueDefaults: IssueDefaults;
   enabled: boolean;
   createdAt: number;
 };
 
-export type FormInput = Omit<FormRecord, "id" | "createdAt" | "autoSummary"> & { autoSummary?: boolean };
+export type FormInput = Omit<FormRecord, "id" | "createdAt" | "autoSummary" | "issueDefaults"> &
+  Partial<Pick<FormRecord, "autoSummary" | "issueDefaults">>;
 
 type Row = Record<string, unknown>;
 
@@ -75,6 +97,7 @@ CREATE TABLE IF NOT EXISTS forms (
   description TEXT NOT NULL DEFAULT '',
   field_ids TEXT NOT NULL,
   auto_summary INTEGER NOT NULL DEFAULT 0,
+  issue_defaults TEXT NOT NULL DEFAULT '{}',
   enabled INTEGER NOT NULL DEFAULT 1,
   created_at INTEGER NOT NULL
 );
@@ -85,6 +108,7 @@ const ADDED_FORM_COLUMNS = {
   issue_type_name: "TEXT NOT NULL DEFAULT ''",
   description: "TEXT NOT NULL DEFAULT ''",
   auto_summary: "INTEGER NOT NULL DEFAULT 0",
+  issue_defaults: "TEXT NOT NULL DEFAULT '{}'",
 };
 
 // Tokens are encrypted at rest; everything else is stored as is.
@@ -128,6 +152,7 @@ export function createStore(sql: SqlDriver, encryptionKey: Buffer) {
       description: String(row.description),
       fieldIds: JSON.parse(String(row.field_ids)) as number[],
       autoSummary: Number(row.auto_summary) === 1,
+      issueDefaults: { ...NO_DEFAULTS, ...(JSON.parse(String(row.issue_defaults)) as Partial<IssueDefaults>) },
       enabled: Number(row.enabled) === 1,
       createdAt: Number(row.created_at),
     };
@@ -224,8 +249,8 @@ export function createStore(sql: SqlDriver, encryptionKey: Buffer) {
     createForm(input: FormInput): FormRecord {
       const id = randomId();
       run(
-        `INSERT INTO forms (id, connection_id, project_id, project_name, issue_type_id, issue_type_name, title, description, field_ids, auto_summary, enabled, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO forms (id, connection_id, project_id, project_name, issue_type_id, issue_type_name, title, description, field_ids, auto_summary, issue_defaults, enabled, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         id,
         input.connectionId,
         input.projectId,
@@ -236,6 +261,7 @@ export function createStore(sql: SqlDriver, encryptionKey: Buffer) {
         input.description,
         JSON.stringify(input.fieldIds),
         input.autoSummary ? 1 : 0,
+        JSON.stringify(input.issueDefaults ?? NO_DEFAULTS),
         input.enabled ? 1 : 0,
         Date.now(),
       );
@@ -244,15 +270,16 @@ export function createStore(sql: SqlDriver, encryptionKey: Buffer) {
 
     updateForm(
       id: string,
-      patch: Pick<FormRecord, "issueTypeName" | "title" | "description" | "fieldIds" | "autoSummary" | "enabled">,
+      patch: Pick<FormRecord, "issueTypeName" | "title" | "description" | "fieldIds" | "autoSummary" | "issueDefaults" | "enabled">,
     ): void {
       run(
-        "UPDATE forms SET issue_type_name = ?, title = ?, description = ?, field_ids = ?, auto_summary = ?, enabled = ? WHERE id = ?",
+        "UPDATE forms SET issue_type_name = ?, title = ?, description = ?, field_ids = ?, auto_summary = ?, issue_defaults = ?, enabled = ? WHERE id = ?",
         patch.issueTypeName,
         patch.title,
         patch.description,
         JSON.stringify(patch.fieldIds),
         patch.autoSummary ? 1 : 0,
+        JSON.stringify(patch.issueDefaults),
         patch.enabled ? 1 : 0,
         id,
       );

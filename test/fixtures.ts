@@ -1,4 +1,5 @@
 import type { FormSchema } from "../src/backlog/schema.ts";
+import { NO_DEFAULTS } from "../src/store.ts";
 import type { CustomField } from "../src/backlog/types.ts";
 
 const base = { projectId: 1, description: "", required: false, applicableIssueTypes: [] };
@@ -26,5 +27,6 @@ export const schema: FormSchema = {
   title: "お問い合わせ",
   description: "",
   autoSummary: false,
+  issueDefaults: NO_DEFAULTS,
   fields,
 };

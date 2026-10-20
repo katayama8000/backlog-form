@@ -18,6 +18,17 @@ export function setup() {
     findProject: async (id) => (id === schema.project.id ? schema.project : null),
     getIssueTypes: async () => [schema.issueType, { id: 6, projectId: 1, name: "タスク" }],
     getCustomFields: async () => schema.fields,
+    getProjectUsers: async () => [{ id: 1, userId: "alice", name: "Alice" }, { id: 2, userId: "bob", name: "Bob" }],
+    getCategories: async () => [{ id: 30, name: "画面" }, { id: 31, name: "API" }],
+    getMilestones: async () => [
+      { id: 40, name: "v1", archived: false },
+      { id: 41, name: "v0", archived: true },
+    ],
+    getPriorities: async () => [
+      { id: 2, name: "高" },
+      { id: 3, name: "中" },
+      { id: 4, name: "低" },
+    ],
     addIssue: async (params) => {
       issues.push(params);
       return { id: 1, issueKey: "TEST-1" };

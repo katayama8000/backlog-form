@@ -7,9 +7,10 @@ import { applicableFields, FormUnavailableError, type SchemaLoader } from "../ba
 import { randomId } from "../crypto.ts";
 import { renderForm } from "../form/render.ts";
 import type { Backend } from "../backend.ts";
-import type { Connection } from "../store.ts";
+import { type Connection, NO_DEFAULTS } from "../store.ts";
 import {
   type EditorView,
+  type IssueChoices,
   renderAdminMessage,
   renderEditor,
   renderFormList,
@@ -38,25 +39,37 @@ const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 const TITLE_MAX = 100;
 const DESCRIPTION_MAX = 1000;
 
-// Project, issue type and its applicable fields, as visible to the signed-in user.
+// Project, issue type, its applicable fields and the choices for issue
+// defaults, as visible to the signed-in user.
 async function loadTarget(client: BacklogClient, projectId: number, issueTypeId: number) {
   const project = await client.findProject(projectId);
   if (!project || project.archived) return null;
-  const [issueTypes, customFields] = await Promise.all([
+  const [issueTypes, customFields, users, categories, milestones, priorities] = await Promise.all([
     client.getIssueTypes(projectId),
     client.getCustomFields(projectId),
+    client.getProjectUsers(projectId),
+    client.getCategories(projectId),
+    client.getMilestones(projectId),
+    client.getPriorities(),
   ]);
   const issueType = issueTypes.find((t) => t.id === issueTypeId);
   if (!issueType) return null;
-  return { project, issueType, fields: applicableFields(customFields, issueTypeId) };
+  const choices: IssueChoices = { users, categories, milestones: milestones.filter((m) => !m.archived), priorities };
+  return { project, issueType, fields: applicableFields(customFields, issueTypeId), choices };
 }
 
 function toId(value: unknown): number | undefined {
   return typeof value === "string" && /^\d+$/.test(value) ? Number(value) : undefined;
 }
 
-// Reads the editor's form body. Unknown field ids are dropped.
-function readEditor(data: FormData, applicable: { id: number }[]) {
+// Keeps only ids that are among the choices.
+function pick(values: unknown[], choices: { id: number }[]): number[] {
+  const allowed = new Set(choices.map((c) => c.id));
+  return values.map(toId).filter((id): id is number => id !== undefined && allowed.has(id));
+}
+
+// Reads the editor's form body. Unknown ids are dropped.
+function readEditor(data: FormData, applicable: { id: number }[], choices: IssueChoices) {
   const allowed = new Set(applicable.map((f) => f.id));
   const title = String(data.get("title") ?? "").trim();
   const description = String(data.get("description") ?? "").trim();
@@ -69,6 +82,12 @@ function readEditor(data: FormData, applicable: { id: number }[]) {
     description,
     fieldIds,
     autoSummary: data.get("autoSummary") === "1",
+    issueDefaults: {
+      assigneeId: pick([data.get("assigneeId")], choices.users)[0] ?? null,
+      priorityId: pick([data.get("priorityId")], choices.priorities)[0] ?? null,
+      categoryIds: pick(data.getAll("categoryIds"), choices.categories),
+      milestoneIds: pick(data.getAll("milestoneIds"), choices.milestones),
+    },
     enabled: data.get("enabled") === "1",
   };
   const errors: Record<string, string> = {};
@@ -204,7 +223,14 @@ export function adminRoutes(deps: AdminDeps) {
       renderEditor({
         connection,
         ...target,
-        values: { title: target.issueType.name, description: "", fieldIds: [], autoSummary: false, enabled: true },
+        values: {
+          title: target.issueType.name,
+          description: "",
+          fieldIds: [],
+          autoSummary: false,
+          issueDefaults: NO_DEFAULTS,
+          enabled: true,
+        },
       }),
     );
   });
@@ -223,7 +249,7 @@ export function adminRoutes(deps: AdminDeps) {
     if (!target) {
       return c.html(renderAdminMessage(connection, "見つかりません", "プロジェクトまたは課題種別が見つかりません。"), 404);
     }
-    const { values, errors } = readEditor(data, target.fields);
+    const { values, errors } = readEditor(data, target.fields, target.choices);
     if (errors) return c.html(renderEditor({ connection, ...target, values, errors }), 400);
 
     const form = await store.createForm({
@@ -291,7 +317,7 @@ export function adminRoutes(deps: AdminDeps) {
   app.post("/forms/:id", async (c) => {
     const view = await editorFor(c);
     if (view instanceof Response) return view;
-    const { values, errors } = readEditor(await c.req.formData(), view.fields);
+    const { values, errors } = readEditor(await c.req.formData(), view.fields, view.choices);
     if (errors) return c.html(renderEditor({ ...view, values, errors }), 400);
     // Also refreshes the issue type name, which older forms don't have.
     await store.updateForm(view.form!.id, { ...values, issueTypeName: view.issueType.name });

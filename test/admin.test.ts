@@ -103,11 +103,32 @@ test("updates and deletes a form", async () => {
     enabled: true,
   });
 
-  await ctx.app.fetch(post(`/forms/${form.id}`, { title: "新タイトル", fieldIds: ["11"], autoSummary: "1" }, session));
+  const editor = await (await ctx.app.request(`/forms/${form.id}`, { headers: { cookie: session } })).text();
+  assert.match(editor, /<option value="3" selected>中<\/option>/); // priority defaults to Normal
+  assert.match(editor, /name="milestoneIds" value="40"/);
+  assert.doesNotMatch(editor, /name="milestoneIds" value="41"/); // archived
+
+  await ctx.app.fetch(
+    post(
+      `/forms/${form.id}`,
+      {
+        title: "新タイトル",
+        fieldIds: ["11"],
+        autoSummary: "1",
+        assigneeId: "2",
+        priorityId: "4",
+        categoryIds: ["31", "999"],
+        milestoneIds: ["41"],
+      },
+      session,
+    ),
+  );
   const updated = ctx.store.getForm(form.id)!;
   assert.equal(updated.title, "新タイトル");
   assert.deepEqual(updated.fieldIds, [11]);
   assert.equal(updated.autoSummary, true);
+  // Unknown and archived ids are dropped.
+  assert.deepEqual(updated.issueDefaults, { assigneeId: 2, priorityId: 4, categoryIds: [31], milestoneIds: [] });
   assert.equal(updated.enabled, false); // unchecked box
 
   await ctx.app.fetch(post(`/forms/${form.id}/delete`, {}, session));
