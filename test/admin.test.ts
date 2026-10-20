@@ -74,6 +74,7 @@ test("creates a form through the wizard", async () => {
   assert.equal(res.headers.get("location"), `/forms/${form.id}`);
   assert.deepEqual(form.fieldIds, [12]); // unknown ids are dropped
   assert.equal(form.enabled, true);
+  assert.equal(form.autoSummary, false);
 
   const page = await (await get(`/forms/${form.id}`)).text();
   assert.match(page, new RegExp(`http://localhost/f/${form.id}`));
@@ -102,10 +103,11 @@ test("updates and deletes a form", async () => {
     enabled: true,
   });
 
-  await ctx.app.fetch(post(`/forms/${form.id}`, { title: "新タイトル", fieldIds: ["11"] }, session));
+  await ctx.app.fetch(post(`/forms/${form.id}`, { title: "新タイトル", fieldIds: ["11"], autoSummary: "1" }, session));
   const updated = ctx.store.getForm(form.id)!;
   assert.equal(updated.title, "新タイトル");
   assert.deepEqual(updated.fieldIds, [11]);
+  assert.equal(updated.autoSummary, true);
   assert.equal(updated.enabled, false); // unchecked box
 
   await ctx.app.fetch(post(`/forms/${form.id}/delete`, {}, session));

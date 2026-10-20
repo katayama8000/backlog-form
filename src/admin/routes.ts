@@ -64,7 +64,13 @@ function readEditor(data: FormData, applicable: { id: number }[]) {
     .getAll("fieldIds")
     .map(toId)
     .filter((id): id is number => id !== undefined && allowed.has(id));
-  const values = { title, description, fieldIds, enabled: data.get("enabled") === "1" };
+  const values = {
+    title,
+    description,
+    fieldIds,
+    autoSummary: data.get("autoSummary") === "1",
+    enabled: data.get("enabled") === "1",
+  };
   const errors: Record<string, string> = {};
   if (title === "") errors.title = "入力してください";
   else if (title.length > TITLE_MAX) errors.title = `${TITLE_MAX} 文字以内で入力してください`;
@@ -198,7 +204,7 @@ export function adminRoutes(deps: AdminDeps) {
       renderEditor({
         connection,
         ...target,
-        values: { title: target.issueType.name, description: "", fieldIds: [], enabled: true },
+        values: { title: target.issueType.name, description: "", fieldIds: [], autoSummary: false, enabled: true },
       }),
     );
   });

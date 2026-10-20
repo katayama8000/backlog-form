@@ -32,3 +32,15 @@ export function readInput(form: Pick<FormData, "get" | "getAll">, fields: Custom
   }
   return input;
 }
+
+const SENT_AT = new Intl.DateTimeFormat("ja-JP", {
+  timeZone: "Asia/Tokyo",
+  dateStyle: "short",
+  timeStyle: "short",
+});
+
+// The summary of issues from forms that don't ask for one,
+// e.g. "お問い合わせ（2026/10/20 14:30）".
+export function generatedSummary(title: string, sentAt: Date): string {
+  return `${title}（${SENT_AT.format(sentAt)}）`;
+}

@@ -139,11 +139,13 @@ export function renderForm(view: FormView): Html {
     <p class="lead"><span class="req">必須</span> の項目は入力が必要です。</p>
     ${formError}
     <form method="post" data-once ${view.preview ? html`onsubmit="return false"` : ""}>
-      <div class="field">
-        <label class="label" for="${names.summary}">${label("件名", true)}</label>
-        <input type="text" id="${names.summary}" name="${names.summary}" value="${single(input, names.summary)}" maxlength="255" required ${invalid(errors?.[names.summary])} />
-        ${errorText(errors?.[names.summary])}
-      </div>
+      ${schema.autoSummary
+        ? ""
+        : html`<div class="field">
+            <label class="label" for="${names.summary}">${label("件名", true)}</label>
+            <input type="text" id="${names.summary}" name="${names.summary}" value="${single(input, names.summary)}" maxlength="255" required ${invalid(errors?.[names.summary])} />
+            ${errorText(errors?.[names.summary])}
+          </div>`}
       ${schema.fields.map((field) => fieldRow(field, view))}
       <div class="field">
         <label class="label" for="${names.description}">詳細</label>

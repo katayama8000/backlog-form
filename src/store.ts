@@ -29,11 +29,13 @@ export type FormRecord = {
   description: string;
   // Custom fields shown on the form. Required fields are always shown.
   fieldIds: number[];
+  // Issues get a generated summary, and the form doesn't ask for one.
+  autoSummary: boolean;
   enabled: boolean;
   createdAt: number;
 };
 
-export type FormInput = Omit<FormRecord, "id" | "createdAt">;
+export type FormInput = Omit<FormRecord, "id" | "createdAt" | "autoSummary"> & { autoSummary?: boolean };
 
 type Row = Record<string, unknown>;
 
@@ -72,6 +74,7 @@ CREATE TABLE IF NOT EXISTS forms (
   title TEXT NOT NULL,
   description TEXT NOT NULL DEFAULT '',
   field_ids TEXT NOT NULL,
+  auto_summary INTEGER NOT NULL DEFAULT 0,
   enabled INTEGER NOT NULL DEFAULT 1,
   created_at INTEGER NOT NULL
 );
@@ -81,6 +84,7 @@ CREATE TABLE IF NOT EXISTS forms (
 const ADDED_FORM_COLUMNS = {
   issue_type_name: "TEXT NOT NULL DEFAULT ''",
   description: "TEXT NOT NULL DEFAULT ''",
+  auto_summary: "INTEGER NOT NULL DEFAULT 0",
 };
 
 // Tokens are encrypted at rest; everything else is stored as is.
@@ -123,6 +127,7 @@ export function createStore(sql: SqlDriver, encryptionKey: Buffer) {
       title: String(row.title),
       description: String(row.description),
       fieldIds: JSON.parse(String(row.field_ids)) as number[],
+      autoSummary: Number(row.auto_summary) === 1,
       enabled: Number(row.enabled) === 1,
       createdAt: Number(row.created_at),
     };
@@ -219,8 +224,8 @@ export function createStore(sql: SqlDriver, encryptionKey: Buffer) {
     createForm(input: FormInput): FormRecord {
       const id = randomId();
       run(
-        `INSERT INTO forms (id, connection_id, project_id, project_name, issue_type_id, issue_type_name, title, description, field_ids, enabled, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO forms (id, connection_id, project_id, project_name, issue_type_id, issue_type_name, title, description, field_ids, auto_summary, enabled, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         id,
         input.connectionId,
         input.projectId,
@@ -230,6 +235,7 @@ export function createStore(sql: SqlDriver, encryptionKey: Buffer) {
         input.title,
         input.description,
         JSON.stringify(input.fieldIds),
+        input.autoSummary ? 1 : 0,
         input.enabled ? 1 : 0,
         Date.now(),
       );
@@ -238,14 +244,15 @@ export function createStore(sql: SqlDriver, encryptionKey: Buffer) {
 
     updateForm(
       id: string,
-      patch: Pick<FormRecord, "issueTypeName" | "title" | "description" | "fieldIds" | "enabled">,
+      patch: Pick<FormRecord, "issueTypeName" | "title" | "description" | "fieldIds" | "autoSummary" | "enabled">,
     ): void {
       run(
-        "UPDATE forms SET issue_type_name = ?, title = ?, description = ?, field_ids = ?, enabled = ? WHERE id = ?",
+        "UPDATE forms SET issue_type_name = ?, title = ?, description = ?, field_ids = ?, auto_summary = ?, enabled = ? WHERE id = ?",
         patch.issueTypeName,
         patch.title,
         patch.description,
         JSON.stringify(patch.fieldIds),
+        patch.autoSummary ? 1 : 0,
         patch.enabled ? 1 : 0,
         id,
       );

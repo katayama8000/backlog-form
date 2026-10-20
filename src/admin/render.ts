@@ -151,7 +151,7 @@ export type EditorView = {
   issueType: IssueType;
   // Custom fields applicable to the issue type.
   fields: CustomField[];
-  values: { title: string; description: string; fieldIds: number[]; enabled: boolean };
+  values: { title: string; description: string; fieldIds: number[]; autoSummary: boolean; enabled: boolean };
   errors?: Record<string, string>;
   // Set when editing an existing form.
   form?: { id: string; url: string };
@@ -212,8 +212,13 @@ export function renderEditor(view: EditorView): Html {
           ${errors?.description ? html`<small class="error">${errors.description}</small>` : ""}
         </div>
         <fieldset class="field">
+          <legend>件名</legend>
+          <label class="choice"><input type="checkbox" name="autoSummary" value="1" ${values.autoSummary ? "checked" : ""} />件名を自動で付ける</label>
+          <span class="hint">フォームに件名の入力欄を出さず、「タイトル（送信日時）」を課題の件名にします。何を書けばいいか迷わせたくないときに使います</span>
+        </fieldset>
+        <fieldset class="field">
           <legend>フォームに表示するカスタム属性</legend>
-          <span class="hint">「件名」と「詳細」は常に表示されます。項目名と説明文はフォームを開いた人にそのまま表示されるので、見せたくない属性は選ばないでください。</span>
+          <span class="hint">「詳細」は常に表示されます。項目名と説明文はフォームを開いた人にそのまま表示されるので、見せたくない属性は選ばないでください。</span>
           ${fieldChoices(view)}
         </fieldset>
         <p class="notice">カスタム属性の追加や選択肢の変更は、Backlog の${backlogLink(view.connection, "ListAttribute", project.id, "プロジェクト設定の「カスタム属性」")}で行います。追加したら、この画面を再読み込みしてください。</p>

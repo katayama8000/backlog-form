@@ -4,7 +4,7 @@ import { HTTPException } from "hono/http-exception";
 import { adminRoutes } from "./admin/routes.ts";
 import { type BacklogGateway, type OAuthProvider, ReauthRequiredError } from "./backlog/client.ts";
 import { createSchemaLoader, type FormSchema, FormUnavailableError } from "./backlog/schema.ts";
-import { names, readInput } from "./form/input.ts";
+import { generatedSummary, names, readInput } from "./form/input.ts";
 import { renderDone, renderForm, renderMessage } from "./form/render.ts";
 import { toIssueParams } from "./form/to-issue.ts";
 import { validate } from "./form/validate.ts";
@@ -70,6 +70,7 @@ export function createApp(deps: AppDeps) {
 
     const formData = await c.req.formData();
     const input = readInput(formData, schema.fields);
+    if (schema.autoSummary) input[names.summary] = generatedSummary(schema.title, new Date());
     const view = { schema, input, turnstileSiteKey: turnstile?.siteKey };
 
     // Bots tend to fill every field; pretend success so they don't retry.

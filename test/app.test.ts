@@ -5,7 +5,7 @@ import type { CustomField } from "../src/backlog/types.ts";
 import { schema } from "./fixtures.ts";
 import { post, setup } from "./helpers.ts";
 
-function withForm(overrides: { fieldIds?: number[]; enabled?: boolean } = {}) {
+function withForm(overrides: { fieldIds?: number[]; enabled?: boolean; autoSummary?: boolean } = {}) {
   const ctx = setup();
   const form = ctx.store.createForm({
     connectionId: ctx.connection.id,
@@ -82,6 +82,16 @@ test("creates an issue with custom field params", async () => {
   assert.equal(params.priorityId, 3);
   assert.equal(params.customField_10, "Nulab");
   assert.deepEqual(params.customField_13, ["100", "101"]);
+});
+
+test("generates the summary when the form doesn't ask for one", async () => {
+  const { app, issues, url } = withForm({ autoSummary: true });
+  const body = await (await app.request(url)).text();
+  assert.doesNotMatch(body, /name="summary"/);
+  // A summary sent anyway is ignored.
+  const res = await app.fetch(post(url, { summary: "無視される", cf_10: "Nulab" }));
+  assert.equal(res.status, 200);
+  assert.match(String(issues[0]?.summary), /^お問い合わせ（\d{4}\/\d{1,2}\/\d{1,2} \d{1,2}:\d{2}）$/);
 });
 
 test("returns 400 and keeps input on validation errors", async () => {
