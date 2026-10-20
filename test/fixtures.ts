@@ -25,5 +25,6 @@ export const schema: FormSchema = {
   issueType: { id: 5, projectId: 1, name: "お問い合わせ" },
   title: "お問い合わせ",
   description: "",
+  autoSummary: false,
   fields,
 };

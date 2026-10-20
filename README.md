@@ -19,6 +19,7 @@ Tips:
 - **Required custom fields are always shown**, because Backlog rejects issues without them.
 - **Field names and descriptions are shown to anyone who opens the form.** Don't select fields you don't want them to see.
 - **Field definitions live in Backlog.** Add fields or change choices under Project settings > Custom fields (linked from the form page); the form picks up changes within about five minutes.
+- **Let the app write the summary** with 件名を自動で付ける. The form then has no summary field, and issues are titled "{form title}（{date and time sent, JST}）". Useful when submitters wouldn't know what to write.
 - **Prefill fields with the URL.** Add query parameters named after the inputs, e.g. `/f/{id}?summary=Bug%20report&cf_10=...`. Custom fields are `cf_{field ID}`; for lists, pass the item ID, and repeat the parameter to check several. Submitters can still change the values.
 - **Multiple-choice lists are shown as checkboxes** on the form, since they are easier to use than a multi-select box, especially on phones.
 - **Issues are created as the user who made the form.** If you don't want your name on them, sign in with a dedicated account.

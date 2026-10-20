@@ -8,6 +8,7 @@ export type FormSchema = {
   issueType: IssueType;
   title: string;
   description: string;
+  autoSummary: boolean;
   fields: CustomField[];
 };
 
@@ -53,12 +54,19 @@ export function createSchemaLoader(store: Backend, gateway: BacklogGateway) {
     const fields = applicableFields(customFields, issueType.id).filter(
       (f) => f.required || selected.has(f.id),
     );
-    return { project, issueType, title: form.title, description: form.description, fields };
+    return {
+      project,
+      issueType,
+      title: form.title,
+      description: form.description,
+      autoSummary: form.autoSummary,
+      fields,
+    };
   }
 
   return {
     async load(form: FormRecord, { fresh = false }: { fresh?: boolean } = {}): Promise<FormSchema> {
-      const settings = JSON.stringify([form.title, form.description, form.fieldIds]);
+      const settings = JSON.stringify([form.title, form.description, form.fieldIds, form.autoSummary]);
       const cached = cache.get(form.id);
       if (!fresh && cached && cached.settings === settings && cached.expiresAt > Date.now()) {
         return cached.schema;
