@@ -7,7 +7,7 @@ import type { FormInput } from "../src/store.ts";
 import { schema } from "./fixtures.ts";
 import { post, setup } from "./helpers.ts";
 
-function withForm(overrides: Partial<Pick<FormInput, "fieldIds" | "enabled" | "autoSummary" | "issueDefaults">> = {}) {
+function withForm(overrides: Partial<Pick<FormInput, "fieldIds" | "enabled" | "autoSummary" | "issueDefaults" | "lang">> = {}) {
   const ctx = setup();
   const form = ctx.store.createForm({
     connectionId: ctx.connection.id,
@@ -121,6 +121,22 @@ test("retries without defaults when Backlog rejects them", async () => {
   assert.equal(issues.length, 1);
   assert.equal(issues[0]?.assigneeId, undefined);
   assert.equal(issues[0]?.priorityId, 3);
+});
+
+test("shows English forms in English", async () => {
+  const { app, issues, url } = withForm({ lang: "en", autoSummary: true });
+  const body = await (await app.request(url)).text();
+  assert.match(body, /<html lang="en">/);
+  assert.match(body, />Submit<\/button>/);
+  // The shared script keeps a Japanese fallback for buttons without data-busy.
+  assert.doesNotMatch(body.replace(/<script>[\s\S]*?<\/script>/g, ""), /送信|必須|件名|詳細|選択してください/);
+
+  const invalid = await (await app.fetch(post(url, {}))).text();
+  assert.match(invalid, /Please fill in this field/);
+
+  const done = await (await app.fetch(post(url, { cf_10: "Nulab" }))).text();
+  assert.match(done, /Submitted/);
+  assert.match(String(issues[0]?.summary), /^お問い合わせ \([A-Z][a-z]{2} \d{1,2}, \d{4}, \d{1,2}:\d{2} [AP]M JST\)$/);
 });
 
 test("returns 400 and keeps input on validation errors", async () => {

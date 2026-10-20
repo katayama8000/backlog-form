@@ -6,6 +6,7 @@ import { adminRoutes } from "./admin/routes.ts";
 import { type BacklogGateway, type OAuthProvider, ReauthRequiredError } from "./backlog/client.ts";
 import { createSchemaLoader, type FormSchema, FormUnavailableError } from "./backlog/schema.ts";
 import { generatedSummary, names, readInput } from "./form/input.ts";
+import { MESSAGES } from "./form/messages.ts";
 import { renderDone, renderForm, renderMessage } from "./form/render.ts";
 import { toIssueParams } from "./form/to-issue.ts";
 import { validate } from "./form/validate.ts";
@@ -33,8 +34,8 @@ export function createApp(deps: AppDeps) {
 
   app.route("/", adminRoutes({ ...deps, schemas }));
 
-  const notFound = renderMessage("Not Found", "フォームが見つかりません");
-  const unavailable = renderMessage("ご利用いただけません", "このフォームは現在ご利用いただけません。時間をおいて再度お試しください。");
+  // The form, and so its language, is unknown here.
+  const notFound = renderMessage("Not Found", "フォームが見つかりません / Form not found");
 
   // Resolves a public form, or the error page to show instead.
   async function loadForm(
@@ -48,7 +49,8 @@ export function createApp(deps: AppDeps) {
     } catch (error) {
       if (error instanceof FormUnavailableError || error instanceof ReauthRequiredError) {
         console.warn(error.message);
-        return c.html(unavailable, 503);
+        const t = MESSAGES[form.lang];
+        return c.html(renderMessage(t.unavailableTitle, t.unavailable, form.lang), 503);
       }
       throw error;
     }
@@ -68,10 +70,11 @@ export function createApp(deps: AppDeps) {
     const loaded = await loadForm(c, true);
     if (loaded instanceof Response) return loaded;
     const { form, schema } = loaded;
+    const t = MESSAGES[schema.lang];
 
     const formData = await c.req.formData();
     const input = readInput(formData, schema.fields);
-    if (schema.autoSummary) input[names.summary] = generatedSummary(schema.title, new Date());
+    if (schema.autoSummary) input[names.summary] = generatedSummary(schema.title, new Date(), schema.lang);
     const view = { schema, input, turnstileSiteKey: turnstile?.siteKey };
 
     // Bots tend to fill every field; pretend success so they don't retry.
@@ -86,11 +89,11 @@ export function createApp(deps: AppDeps) {
         c.req.header("CF-Connecting-IP"),
       );
       if (!passed) {
-        return c.html(renderForm({ ...view, errors: { form: "認証に失敗しました。もう一度お試しください。" } }), 400);
+        return c.html(renderForm({ ...view, errors: { form: t.turnstileFailed } }), 400);
       }
     }
 
-    const result = validate(input, schema.fields);
+    const result = validate(input, schema.fields, t.errors);
     if (!result.ok) return c.html(renderForm({ ...view, errors: result.errors }), 400);
 
     try {
@@ -108,7 +111,7 @@ export function createApp(deps: AppDeps) {
     } catch (error) {
       console.error("Failed to create issue", error);
       return c.html(
-        renderForm({ ...view, errors: { form: "送信に失敗しました。時間をおいて再度お試しください。" } }),
+        renderForm({ ...view, errors: { form: t.submitFailed } }),
         502,
       );
     }

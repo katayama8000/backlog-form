@@ -1,4 +1,5 @@
 import { type CustomField, isMultiValue } from "../backlog/types.ts";
+import type { Lang } from "./messages.ts";
 
 // HTML input names. Kept in one place so render and validate never drift.
 export const names = {
@@ -33,14 +34,13 @@ export function readInput(form: Pick<FormData, "get" | "getAll">, fields: Custom
   return input;
 }
 
-const SENT_AT = new Intl.DateTimeFormat("ja-JP", {
-  timeZone: "Asia/Tokyo",
-  dateStyle: "short",
-  timeStyle: "short",
-});
+const SENT_AT = {
+  ja: new Intl.DateTimeFormat("ja-JP", { timeZone: "Asia/Tokyo", dateStyle: "short", timeStyle: "short" }),
+  en: new Intl.DateTimeFormat("en-US", { timeZone: "Asia/Tokyo", dateStyle: "medium", timeStyle: "short" }),
+};
 
-// The summary of issues from forms that don't ask for one,
-// e.g. "お問い合わせ（2026/10/20 14:30）".
-export function generatedSummary(title: string, sentAt: Date): string {
-  return `${title}（${SENT_AT.format(sentAt)}）`;
+// The summary of issues from forms that don't ask for one, e.g.
+// "お問い合わせ（2026/10/20 14:30）" or "Contact (Oct 20, 2026, 2:30 PM JST)".
+export function generatedSummary(title: string, sentAt: Date, lang: Lang): string {
+  return lang === "en" ? `${title} (${SENT_AT.en.format(sentAt)} JST)` : `${title}（${SENT_AT.ja.format(sentAt)}）`;
 }

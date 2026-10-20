@@ -10,6 +10,7 @@ import {
   type User,
 } from "../backlog/types.ts";
 import { type Html, layout } from "../layout.ts";
+import { type Lang, LANGS } from "../form/messages.ts";
 import type { Connection, FormRecord, IssueDefaults } from "../store.ts";
 
 const APP_NAME = "Backlog Form";
@@ -175,6 +176,7 @@ export type EditorView = {
     fieldIds: number[];
     autoSummary: boolean;
     issueDefaults: IssueDefaults;
+    lang: Lang;
     enabled: boolean;
   };
   errors?: Record<string, string>;
@@ -266,6 +268,13 @@ export function renderEditor(view: EditorView): Html {
           <span class="hint">タイトルの下に表示されます。何を受け付けるフォームか、回答の目安などを書いておくと親切です</span>
           <textarea id="description" name="description" rows="4" maxlength="1000" ${errors?.description ? html`aria-invalid="true"` : ""}>${values.description}</textarea>
           ${errors?.description ? html`<small class="error">${errors.description}</small>` : ""}
+        </div>
+        <div class="field">
+          <label class="label" for="lang">フォームの言語</label>
+          <span class="hint">ボタンや案内、エラーメッセージの言語です。タイトル・説明・項目名・選択肢は、入力したとおりに表示されます</span>
+          <select id="lang" name="lang">
+            ${Object.entries(LANGS).map(([code, name]) => html`<option value="${code}" ${values.lang === code ? "selected" : ""}>${name}</option>`)}
+          </select>
         </div>
         <fieldset class="field">
           <legend>件名</legend>

@@ -8,6 +8,7 @@ import {
 } from "../backlog/types.ts";
 import { type Html, layout } from "../layout.ts";
 import { names, type RawInput } from "./input.ts";
+import { type Lang, MESSAGES, type Messages } from "./messages.ts";
 
 export type FormView = {
   schema: FormSchema;
@@ -32,8 +33,8 @@ function invalid(error: string | undefined) {
   return error ? html`aria-invalid="true"` : html``;
 }
 
-function label(text: string, required: boolean) {
-  return required ? html`${text}<span class="req">必須</span>` : html`${text}`;
+function label(text: string, required: boolean, t: Messages) {
+  return required ? html`${text}<span class="req">${t.required}</span>` : html`${text}`;
 }
 
 function errorText(error: string | undefined) {
@@ -49,6 +50,7 @@ function sortedItems(field: ListField) {
 }
 
 function listControl(field: ListField, view: FormView) {
+  const t = MESSAGES[view.schema.lang];
   const name = names.field(field);
   const selected = new Set(many(view.input, name));
   const error = view.errors?.[name];
@@ -56,7 +58,7 @@ function listControl(field: ListField, view: FormView) {
   switch (field.typeId) {
     case CustomFieldType.SingleList: {
       return html`<select id="${name}" name="${name}" ${invalid(error)}>
-        <option value="">選択してください</option>
+        <option value="">${t.select}</option>
         ${sortedItems(field).map(
           (item) =>
             html`<option value="${item.id}" ${selected.has(String(item.id)) ? "selected" : ""}>${item.name}</option>`,
@@ -76,6 +78,7 @@ function listControl(field: ListField, view: FormView) {
 }
 
 function fieldControl(field: CustomField, view: FormView) {
+  const t = MESSAGES[view.schema.lang];
   const name = names.field(field);
   const value = single(view.input, name);
   const error = view.errors?.[name];
@@ -83,7 +86,7 @@ function fieldControl(field: CustomField, view: FormView) {
 
   if (isListField(field)) {
     const other = field.allowInput
-      ? html`<input type="text" class="other" name="${names.other(field)}" value="${single(view.input, names.other(field))}" placeholder="その他（自由入力）" aria-label="${field.name}（その他）" />`
+      ? html`<input type="text" class="other" name="${names.other(field)}" value="${single(view.input, names.other(field))}" placeholder="${t.other}" aria-label="${t.otherLabel(field.name)}" />`
       : html``;
     return html`${listControl(field, view)}${other}`;
   }
@@ -101,23 +104,25 @@ function fieldControl(field: CustomField, view: FormView) {
 }
 
 function fieldRow(field: CustomField, view: FormView) {
+  const t = MESSAGES[view.schema.lang];
   const name = names.field(field);
   const error = view.errors?.[name];
   // Checkbox and radio groups need a fieldset so the label covers the whole group.
   if (isListField(field) && field.typeId !== CustomFieldType.SingleList) {
     return html`<fieldset class="field">
-      <legend>${label(field.name, field.required)}</legend>
+      <legend>${label(field.name, field.required, t)}</legend>
       ${hintText(field.description)}${fieldControl(field, view)}${errorText(error)}
     </fieldset>`;
   }
   return html`<div class="field">
-    <label class="label" for="${name}">${label(field.name, field.required)}</label>
+    <label class="label" for="${name}">${label(field.name, field.required, t)}</label>
     ${hintText(field.description)}${fieldControl(field, view)}${errorText(error)}
   </div>`;
 }
 
 export function renderForm(view: FormView): Html {
   const { schema, input, errors } = view;
+  const t = MESSAGES[schema.lang];
   const turnstileHead = view.turnstileSiteKey
     ? html`<script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>`
     : html``;
@@ -128,50 +133,53 @@ export function renderForm(view: FormView): Html {
   const formError = errors?.form
     ? html`<p class="alert" role="alert">${errors.form}</p>`
     : fieldErrors
-      ? html`<p class="alert" role="alert">入力内容を確認してください（${fieldErrors} 件）</p>`
+      ? html`<p class="alert" role="alert">${t.checkInput(fieldErrors)}</p>`
       : html``;
   const preview = view.preview
-    ? html`<p class="notice preview-banner">プレビュー（送信はできません）</p>`
+    ? html`<p class="notice preview-banner">${t.preview}</p>`
     : html``;
 
   const body = html`${preview}<h1>${schema.title}</h1>
     ${schema.description ? html`<p class="form-description">${schema.description}</p>` : ""}
-    <p class="lead"><span class="req">必須</span> の項目は入力が必要です。</p>
+    <p class="lead">${t.requiredLead[0]}<span class="req">${t.required}</span>${t.requiredLead[1]}</p>
     ${formError}
     <form method="post" data-once ${view.preview ? html`onsubmit="return false"` : ""}>
       ${schema.autoSummary
         ? ""
         : html`<div class="field">
-            <label class="label" for="${names.summary}">${label("件名", true)}</label>
+            <label class="label" for="${names.summary}">${label(t.summary, true, t)}</label>
             <input type="text" id="${names.summary}" name="${names.summary}" value="${single(input, names.summary)}" maxlength="255" required ${invalid(errors?.[names.summary])} />
             ${errorText(errors?.[names.summary])}
           </div>`}
       ${schema.fields.map((field) => fieldRow(field, view))}
       <div class="field">
-        <label class="label" for="${names.description}">詳細</label>
+        <label class="label" for="${names.description}">${t.description}</label>
         <textarea id="${names.description}" name="${names.description}" rows="8">${single(input, names.description)}</textarea>
       </div>
       <input class="hp" name="${names.honeypot}" tabindex="-1" autocomplete="off" aria-hidden="true" />
       <hr class="divider" />
       ${turnstileWidget}
-      <button type="submit" ${view.preview ? "disabled" : ""}>送信する</button>
+      <button type="submit" data-busy="${t.submitting}" ${view.preview ? "disabled" : ""}>${t.submit}</button>
     </form>`;
-  return layout(schema.title, body, turnstileHead);
+  return layout(schema.title, body, turnstileHead, schema.lang);
 }
 
 // formPath links back to an empty form for another submission.
 export function renderDone(schema: FormSchema, formPath: string): Html {
+  const t = MESSAGES[schema.lang];
   return layout(
     schema.title,
     html`<div class="done">
       <div class="done-mark" aria-hidden="true">✓</div>
-      <h1>送信しました</h1>
-      <p>「${schema.title}」の内容を受け付けました。</p>
-      <p style="margin-top:16px"><a href="${formPath}">続けて送信する</a></p>
+      <h1>${t.done}</h1>
+      <p>${t.received(schema.title)}</p>
+      <p style="margin-top:16px"><a href="${formPath}">${t.again}</a></p>
     </div>`,
+    html``,
+    schema.lang,
   );
 }
 
-export function renderMessage(title: string, message: string): Html {
-  return layout(title, html`<h1>${title}</h1><p>${message}</p>`);
+export function renderMessage(title: string, message: string, lang: Lang = "ja"): Html {
+  return layout(title, html`<h1>${title}</h1><p>${message}</p>`, html``, lang);
 }

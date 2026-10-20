@@ -1,4 +1,5 @@
 import { decrypt, encrypt, randomId, sha256 } from "./crypto.ts";
+import { type Lang, toLang } from "./form/messages.ts";
 
 // A Backlog user who authorized this app via OAuth, in one space.
 // Public forms create issues with this user's tokens.
@@ -52,12 +53,14 @@ export type FormRecord = {
   // Issues get a generated summary, and the form doesn't ask for one.
   autoSummary: boolean;
   issueDefaults: IssueDefaults;
+  // Language of the text on the public form.
+  lang: Lang;
   enabled: boolean;
   createdAt: number;
 };
 
-export type FormInput = Omit<FormRecord, "id" | "createdAt" | "autoSummary" | "issueDefaults"> &
-  Partial<Pick<FormRecord, "autoSummary" | "issueDefaults">>;
+export type FormInput = Omit<FormRecord, "id" | "createdAt" | "autoSummary" | "issueDefaults" | "lang"> &
+  Partial<Pick<FormRecord, "autoSummary" | "issueDefaults" | "lang">>;
 
 type Row = Record<string, unknown>;
 
@@ -98,6 +101,7 @@ CREATE TABLE IF NOT EXISTS forms (
   field_ids TEXT NOT NULL,
   auto_summary INTEGER NOT NULL DEFAULT 0,
   issue_defaults TEXT NOT NULL DEFAULT '{}',
+  lang TEXT NOT NULL DEFAULT 'ja',
   enabled INTEGER NOT NULL DEFAULT 1,
   created_at INTEGER NOT NULL
 );
@@ -109,6 +113,7 @@ const ADDED_FORM_COLUMNS = {
   description: "TEXT NOT NULL DEFAULT ''",
   auto_summary: "INTEGER NOT NULL DEFAULT 0",
   issue_defaults: "TEXT NOT NULL DEFAULT '{}'",
+  lang: "TEXT NOT NULL DEFAULT 'ja'",
 };
 
 // Tokens are encrypted at rest; everything else is stored as is.
@@ -153,6 +158,7 @@ export function createStore(sql: SqlDriver, encryptionKey: Buffer) {
       fieldIds: JSON.parse(String(row.field_ids)) as number[],
       autoSummary: Number(row.auto_summary) === 1,
       issueDefaults: { ...NO_DEFAULTS, ...(JSON.parse(String(row.issue_defaults)) as Partial<IssueDefaults>) },
+      lang: toLang(row.lang),
       enabled: Number(row.enabled) === 1,
       createdAt: Number(row.created_at),
     };
@@ -249,8 +255,8 @@ export function createStore(sql: SqlDriver, encryptionKey: Buffer) {
     createForm(input: FormInput): FormRecord {
       const id = randomId();
       run(
-        `INSERT INTO forms (id, connection_id, project_id, project_name, issue_type_id, issue_type_name, title, description, field_ids, auto_summary, issue_defaults, enabled, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO forms (id, connection_id, project_id, project_name, issue_type_id, issue_type_name, title, description, field_ids, auto_summary, issue_defaults, lang, enabled, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         id,
         input.connectionId,
         input.projectId,
@@ -262,6 +268,7 @@ export function createStore(sql: SqlDriver, encryptionKey: Buffer) {
         JSON.stringify(input.fieldIds),
         input.autoSummary ? 1 : 0,
         JSON.stringify(input.issueDefaults ?? NO_DEFAULTS),
+        input.lang ?? "ja",
         input.enabled ? 1 : 0,
         Date.now(),
       );
@@ -270,16 +277,17 @@ export function createStore(sql: SqlDriver, encryptionKey: Buffer) {
 
     updateForm(
       id: string,
-      patch: Pick<FormRecord, "issueTypeName" | "title" | "description" | "fieldIds" | "autoSummary" | "issueDefaults" | "enabled">,
+      patch: Pick<FormRecord, "issueTypeName" | "title" | "description" | "fieldIds" | "autoSummary" | "issueDefaults" | "lang" | "enabled">,
     ): void {
       run(
-        "UPDATE forms SET issue_type_name = ?, title = ?, description = ?, field_ids = ?, auto_summary = ?, issue_defaults = ?, enabled = ? WHERE id = ?",
+        "UPDATE forms SET issue_type_name = ?, title = ?, description = ?, field_ids = ?, auto_summary = ?, issue_defaults = ?, lang = ?, enabled = ? WHERE id = ?",
         patch.issueTypeName,
         patch.title,
         patch.description,
         JSON.stringify(patch.fieldIds),
         patch.autoSummary ? 1 : 0,
         JSON.stringify(patch.issueDefaults),
+        patch.lang,
         patch.enabled ? 1 : 0,
         id,
       );
