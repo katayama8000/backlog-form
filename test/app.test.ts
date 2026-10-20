@@ -1,11 +1,13 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { Error as BacklogErrors } from "backlog-js";
 import { ReauthRequiredError } from "../src/backlog/client.ts";
 import type { CustomField } from "../src/backlog/types.ts";
+import type { FormInput } from "../src/store.ts";
 import { schema } from "./fixtures.ts";
 import { post, setup } from "./helpers.ts";
 
-function withForm(overrides: { fieldIds?: number[]; enabled?: boolean; autoSummary?: boolean } = {}) {
+function withForm(overrides: Partial<Pick<FormInput, "fieldIds" | "enabled" | "autoSummary" | "issueDefaults">> = {}) {
   const ctx = setup();
   const form = ctx.store.createForm({
     connectionId: ctx.connection.id,
@@ -92,6 +94,33 @@ test("generates the summary when the form doesn't ask for one", async () => {
   const res = await app.fetch(post(url, { summary: "無視される", cf_10: "Nulab" }));
   assert.equal(res.status, 200);
   assert.match(String(issues[0]?.summary), /^お問い合わせ（\d{4}\/\d{1,2}\/\d{1,2} \d{1,2}:\d{2}）$/);
+});
+
+test("sets the form's issue defaults", async () => {
+  const issueDefaults = { assigneeId: 2, priorityId: 2, categoryIds: [30, 31], milestoneIds: [40] };
+  const { app, issues, url } = withForm({ issueDefaults });
+  await app.fetch(post(url, { summary: "件名", cf_10: "Nulab" }));
+  const params = issues[0];
+  assert.ok(params);
+  assert.equal(params.assigneeId, 2);
+  assert.equal(params.priorityId, 2);
+  assert.deepEqual(params.categoryId, [30, 31]);
+  assert.deepEqual(params.milestoneId, [40]);
+});
+
+test("retries without defaults when Backlog rejects them", async () => {
+  const issueDefaults = { assigneeId: 99, priorityId: null, categoryIds: [], milestoneIds: [] };
+  const { app, client, issues, url } = withForm({ issueDefaults });
+  const addIssue = client.addIssue;
+  client.addIssue = async (params) => {
+    if (params.assigneeId !== undefined) throw new BacklogErrors.BacklogApiError(new Response("", { status: 400 }));
+    return addIssue(params);
+  };
+  const res = await app.fetch(post(url, { summary: "件名", cf_10: "Nulab" }));
+  assert.equal(res.status, 200);
+  assert.equal(issues.length, 1);
+  assert.equal(issues[0]?.assigneeId, undefined);
+  assert.equal(issues[0]?.priorityId, 3);
 });
 
 test("returns 400 and keeps input on validation errors", async () => {
