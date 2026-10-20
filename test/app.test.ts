@@ -40,6 +40,16 @@ test("hides unselected fields but always shows required ones", async () => {
   assert.doesNotMatch(body, /name="cf_11"|name="cf_13"/);
 });
 
+test("prefills inputs from the query string", async () => {
+  const { app, url } = withForm();
+  const query = new URLSearchParams({ summary: "件名です", cf_10: "<b>x</b>" });
+  query.append("cf_13", "100");
+  const body = await (await app.request(`${url}?${query}`)).text();
+  assert.match(body, /name="summary" value="件名です"/);
+  assert.match(body, /name="cf_10" value="&lt;b&gt;x&lt;\/b&gt;"/);
+  assert.match(body, /type="checkbox" name="cf_13" value="100" checked/);
+});
+
 test("returns 404 for unknown and disabled forms", async () => {
   const { app } = withForm();
   assert.equal((await app.request("/f/nope")).status, 404);

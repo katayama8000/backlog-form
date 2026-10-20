@@ -56,7 +56,9 @@ export function createApp(deps: AppDeps) {
   app.get("/f/:formId", async (c) => {
     const loaded = await loadForm(c);
     if (loaded instanceof Response) return loaded;
-    return c.html(renderForm({ schema: loaded.schema, turnstileSiteKey: turnstile?.siteKey }));
+    // Query parameters named like the inputs prefill them, e.g. ?summary=...&cf_10=...
+    const input = readInput(new URL(c.req.url).searchParams, loaded.schema.fields);
+    return c.html(renderForm({ schema: loaded.schema, input, turnstileSiteKey: turnstile?.siteKey }));
   });
 
   app.post("/f/:formId", async (c) => {

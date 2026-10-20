@@ -61,7 +61,7 @@ POST /forms/:id             更新
 POST /forms/:id/delete      削除
 
 # 送信する人
-GET  /f/:formId             定義を取得（5 分キャッシュ）→ フォームを SSR
+GET  /f/:formId             定義を取得（5 分キャッシュ）→ フォームを SSR。入力名と同じクエリ（?summary=…&cf_10=…）があれば初期値にする
 POST /f/:formId             定義を再取得（キャッシュを使わない）→ ハニーポット → Turnstile → 検証 → add_issue → 完了画面
 ```
 

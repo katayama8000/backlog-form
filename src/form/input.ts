@@ -11,8 +11,9 @@ export const names = {
 
 export type RawInput = Record<string, string | string[]>;
 
-// Normalizes FormData into plain strings, keeping arrays for multi-value fields.
-export function readInput(form: FormData, fields: CustomField[]): RawInput {
+// Normalizes a submitted FormData, or the query string of a prefilled URL,
+// into plain strings, keeping arrays for multi-value fields.
+export function readInput(form: Pick<FormData, "get" | "getAll">, fields: CustomField[]): RawInput {
   const str = (name: string) => {
     const value = form.get(name);
     return typeof value === "string" ? value.trim() : "";
