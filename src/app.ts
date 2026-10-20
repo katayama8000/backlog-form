@@ -5,14 +5,14 @@ import { HTTPException } from "hono/http-exception";
 import { adminRoutes } from "./admin/routes.ts";
 import { type BacklogGateway, type OAuthProvider, ReauthRequiredError } from "./backlog/client.ts";
 import { createSchemaLoader, type FormSchema, FormUnavailableError } from "./backlog/schema.ts";
-import { generatedSummary, names, readInput } from "./form/input.ts";
+import { generatedSummary, names, readFiles, readInput } from "./form/input.ts";
 import { MESSAGES } from "./form/messages.ts";
 import { renderDone, renderForm, renderMessage } from "./form/render.ts";
 import { toIssueParams } from "./form/to-issue.ts";
-import { validate } from "./form/validate.ts";
+import { validate, validateFiles } from "./form/validate.ts";
 import { renderLanding } from "./admin/render.ts";
 import type { Backend } from "./backend.ts";
-import { type FormRecord, hasDefaults, NO_DEFAULTS } from "./store.ts";
+import { type FormRecord, hasDefaults, type IssueDefaults, NO_DEFAULTS } from "./store.ts";
 import { verifyTurnstile } from "./turnstile.ts";
 
 export type AppDeps = {
@@ -94,19 +94,31 @@ export function createApp(deps: AppDeps) {
     }
 
     const result = validate(input, schema.fields, t.errors);
-    if (!result.ok) return c.html(renderForm({ ...view, errors: result.errors }), 400);
+    const files = schema.allowAttachments ? readFiles(formData) : [];
+    const fileError = validateFiles(files, t.errors);
+    if (!result.ok || fileError) {
+      const errors = { ...(result.ok ? {} : result.errors), ...(fileError ? { [names.attachments]: fileError } : {}) };
+      return c.html(renderForm({ ...view, errors }), 400);
+    }
 
     try {
       const connection = await store.getConnection(form.connectionId);
       if (!connection) throw new FormUnavailableError(`Connection of form ${form.id} is gone`);
       const client = gateway.forConnection(connection);
+      // Uploaded files are attached to the next issue created with their ids.
+      const attachmentIds: number[] = [];
+      for (const file of files) attachmentIds.push((await client.uploadAttachment(file)).id);
+      const params = (defaults: IssueDefaults) => ({
+        ...toIssueParams(schema, result.submission, defaults),
+        ...(attachmentIds.length > 0 ? { attachmentId: attachmentIds } : {}),
+      });
       try {
-        await client.addIssue(toIssueParams(schema, result.submission));
+        await client.addIssue(params(schema.issueDefaults));
       } catch (error) {
         // E.g. the default assignee left the project. Don't lose the submission over it.
         if (!(error instanceof BacklogErrors.BacklogApiError) || !hasDefaults(schema.issueDefaults)) throw error;
         console.warn(`Form ${form.id}: retrying without issue defaults`, error);
-        await client.addIssue(toIssueParams(schema, result.submission, NO_DEFAULTS));
+        await client.addIssue(params(NO_DEFAULTS));
       }
     } catch (error) {
       console.error("Failed to create issue", error);

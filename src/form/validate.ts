@@ -99,3 +99,12 @@ export function validate(
   if (Object.keys(errors).length > 0) return { ok: false, errors };
   return { ok: true, submission: { summary, description, fields: values } };
 }
+
+export const MAX_FILES = 5;
+export const MAX_FILE_MB = 10;
+
+export function validateFiles(files: File[], t: Messages["errors"] = MESSAGES.ja.errors): string | null {
+  if (files.length > MAX_FILES) return t.tooManyFiles(MAX_FILES);
+  const large = files.find((file) => file.size > MAX_FILE_MB * 1024 * 1024);
+  return large ? t.fileTooLarge(large.name, MAX_FILE_MB) : null;
+}

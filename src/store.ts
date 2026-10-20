@@ -55,12 +55,14 @@ export type FormRecord = {
   issueDefaults: IssueDefaults;
   // Language of the text on the public form.
   lang: Lang;
+  // Submitters can attach files, which are added to the issue.
+  allowAttachments: boolean;
   enabled: boolean;
   createdAt: number;
 };
 
-export type FormInput = Omit<FormRecord, "id" | "createdAt" | "autoSummary" | "issueDefaults" | "lang"> &
-  Partial<Pick<FormRecord, "autoSummary" | "issueDefaults" | "lang">>;
+export type FormInput = Omit<FormRecord, "id" | "createdAt" | "autoSummary" | "issueDefaults" | "lang" | "allowAttachments"> &
+  Partial<Pick<FormRecord, "autoSummary" | "issueDefaults" | "lang" | "allowAttachments">>;
 
 type Row = Record<string, unknown>;
 
@@ -102,6 +104,7 @@ CREATE TABLE IF NOT EXISTS forms (
   auto_summary INTEGER NOT NULL DEFAULT 0,
   issue_defaults TEXT NOT NULL DEFAULT '{}',
   lang TEXT NOT NULL DEFAULT 'ja',
+  allow_attachments INTEGER NOT NULL DEFAULT 0,
   enabled INTEGER NOT NULL DEFAULT 1,
   created_at INTEGER NOT NULL
 );
@@ -114,6 +117,7 @@ const ADDED_FORM_COLUMNS = {
   auto_summary: "INTEGER NOT NULL DEFAULT 0",
   issue_defaults: "TEXT NOT NULL DEFAULT '{}'",
   lang: "TEXT NOT NULL DEFAULT 'ja'",
+  allow_attachments: "INTEGER NOT NULL DEFAULT 0",
 };
 
 // Tokens are encrypted at rest; everything else is stored as is.
@@ -159,6 +163,7 @@ export function createStore(sql: SqlDriver, encryptionKey: Buffer) {
       autoSummary: Number(row.auto_summary) === 1,
       issueDefaults: { ...NO_DEFAULTS, ...(JSON.parse(String(row.issue_defaults)) as Partial<IssueDefaults>) },
       lang: toLang(row.lang),
+      allowAttachments: Number(row.allow_attachments) === 1,
       enabled: Number(row.enabled) === 1,
       createdAt: Number(row.created_at),
     };
@@ -255,8 +260,8 @@ export function createStore(sql: SqlDriver, encryptionKey: Buffer) {
     createForm(input: FormInput): FormRecord {
       const id = randomId();
       run(
-        `INSERT INTO forms (id, connection_id, project_id, project_name, issue_type_id, issue_type_name, title, description, field_ids, auto_summary, issue_defaults, lang, enabled, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO forms (id, connection_id, project_id, project_name, issue_type_id, issue_type_name, title, description, field_ids, auto_summary, issue_defaults, lang, allow_attachments, enabled, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         id,
         input.connectionId,
         input.projectId,
@@ -269,6 +274,7 @@ export function createStore(sql: SqlDriver, encryptionKey: Buffer) {
         input.autoSummary ? 1 : 0,
         JSON.stringify(input.issueDefaults ?? NO_DEFAULTS),
         input.lang ?? "ja",
+        input.allowAttachments ? 1 : 0,
         input.enabled ? 1 : 0,
         Date.now(),
       );
@@ -277,10 +283,10 @@ export function createStore(sql: SqlDriver, encryptionKey: Buffer) {
 
     updateForm(
       id: string,
-      patch: Pick<FormRecord, "issueTypeName" | "title" | "description" | "fieldIds" | "autoSummary" | "issueDefaults" | "lang" | "enabled">,
+      patch: Pick<FormRecord, "issueTypeName" | "title" | "description" | "fieldIds" | "autoSummary" | "issueDefaults" | "lang" | "allowAttachments" | "enabled">,
     ): void {
       run(
-        "UPDATE forms SET issue_type_name = ?, title = ?, description = ?, field_ids = ?, auto_summary = ?, issue_defaults = ?, lang = ?, enabled = ? WHERE id = ?",
+        "UPDATE forms SET issue_type_name = ?, title = ?, description = ?, field_ids = ?, auto_summary = ?, issue_defaults = ?, lang = ?, allow_attachments = ?, enabled = ? WHERE id = ?",
         patch.issueTypeName,
         patch.title,
         patch.description,
@@ -288,6 +294,7 @@ export function createStore(sql: SqlDriver, encryptionKey: Buffer) {
         patch.autoSummary ? 1 : 0,
         JSON.stringify(patch.issueDefaults),
         patch.lang,
+        patch.allowAttachments ? 1 : 0,
         patch.enabled ? 1 : 0,
         id,
       );

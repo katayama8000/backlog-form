@@ -12,6 +12,7 @@ export type FormSchema = {
   autoSummary: boolean;
   issueDefaults: IssueDefaults;
   lang: Lang;
+  allowAttachments: boolean;
   fields: CustomField[];
 };
 
@@ -65,13 +66,14 @@ export function createSchemaLoader(store: Backend, gateway: BacklogGateway) {
       autoSummary: form.autoSummary,
       issueDefaults: form.issueDefaults,
       lang: form.lang,
+      allowAttachments: form.allowAttachments,
       fields,
     };
   }
 
   return {
     async load(form: FormRecord, { fresh = false }: { fresh?: boolean } = {}): Promise<FormSchema> {
-      const settings = JSON.stringify([form.title, form.description, form.fieldIds, form.autoSummary, form.issueDefaults, form.lang]);
+      const settings = JSON.stringify([form.title, form.description, form.fieldIds, form.autoSummary, form.issueDefaults, form.lang, form.allowAttachments]);
       const cached = cache.get(form.id);
       if (!fresh && cached && cached.settings === settings && cached.expiresAt > Date.now()) {
         return cached.schema;

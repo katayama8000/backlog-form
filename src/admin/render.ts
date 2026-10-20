@@ -177,6 +177,7 @@ export type EditorView = {
     autoSummary: boolean;
     issueDefaults: IssueDefaults;
     lang: Lang;
+    allowAttachments: boolean;
     enabled: boolean;
   };
   errors?: Record<string, string>;
@@ -287,6 +288,11 @@ export function renderEditor(view: EditorView): Html {
           ${fieldChoices(view)}
         </fieldset>
         <p class="notice">カスタム属性の追加や選択肢の変更は、Backlog の${backlogLink(view.connection, "ListAttribute", project.id, "プロジェクト設定の「カスタム属性」")}で行います。追加したら、この画面を再読み込みしてください。</p>
+        <fieldset class="field">
+          <legend>ファイル添付</legend>
+          <label class="choice"><input type="checkbox" name="allowAttachments" value="1" ${values.allowAttachments ? "checked" : ""} />ファイルの添付を受け付ける</label>
+          <span class="hint">送信する人がファイルを 5 個まで（1 個 10 MB まで）添付でき、課題に添付されます。誰でも送信できるフォームなので、開く前にファイルの内容に注意してください</span>
+        </fieldset>
         <fieldset class="field">
           <legend>課題の初期値</legend>
           <span class="hint">フォームから作られる課題に設定されます。送信する人には表示されません</span>
