@@ -84,6 +84,15 @@ To run the Worker itself locally, put the same variables (except `DATABASE_PATH`
 
 5. Deploy again: `pnpm run deploy`
 
+After that, GitHub Actions deploys every push to `main` once typecheck and tests pass (`.github/workflows/ci.yml`). Pull requests run only the checks. Add these repository secrets:
+
+| Secret | Value |
+|---|---|
+| `CLOUDFLARE_API_TOKEN` | An API token made from the "Edit Cloudflare Workers" template |
+| `CLOUDFLARE_ACCOUNT_ID` | The account ID shown by `pnpm exec wrangler whoami` |
+
+The app's own secrets (`APP_SECRET` and the rest) stay in Cloudflare and are kept across deploys, so they are not GitHub secrets.
+
 Data lives in the Durable Object's storage and survives deploys. Don't rename the `BackendObject` class or its binding in `wrangler.jsonc`; that needs a Durable Object migration, and getting it wrong deletes the data.
 
 On the Free plan, the limits that matter are 100,000 requests a day (Workers and Durable Objects each; a page view uses a few Durable Object calls) and 10 ms of CPU per request. Requests over a daily limit fail instead of being billed.
